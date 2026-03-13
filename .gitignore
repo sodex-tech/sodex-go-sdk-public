@@ -1,0 +1,27 @@
+# Binaries and build output
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/dist/
+
+# Test output
+*.test
+*.out
+coverage.html
+coverage.txt
+
+# Go toolchain
+vendor/
+
+# IDE and editor directories
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS metadata
+.DS_Store
