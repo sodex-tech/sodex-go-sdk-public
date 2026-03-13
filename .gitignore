@@ -25,3 +25,12 @@ vendor/
 
 # macOS metadata
 .DS_Store
+
+# Sensitive files
+.env
+.env.*
+*.pem
+*.key
+
+# Claude Code local config
+.claude/
