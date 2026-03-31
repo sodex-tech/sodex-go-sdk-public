@@ -46,6 +46,12 @@ type ActionPayload struct {
 //
 // Compressing arbitrary-length action data into a fixed-size hash at this stage
 // keeps the EIP-712 type schema simple and independent of the concrete action type.
+//
+// Non-Go implementations must produce byte-identical JSON:
+//   - Compact (no whitespace)
+//   - Key order matching Go struct field order (json.Marshal uses declaration order)
+//   - Decimal fields as JSON strings, not numbers (server API structs use string types)
+//   - omitempty fields omitted when unset; non-omitempty fields always present
 func (ap *ActionPayload) Hash() (common.Hash, error) {
 	bz, err := json.Marshal(ap)
 	if err != nil {
