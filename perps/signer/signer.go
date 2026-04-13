@@ -18,9 +18,9 @@ package signer
 import (
 	"crypto/ecdsa"
 
-	"github.com/sodex-tech/sodex-go-sdk/common/signer"
-	ctypes "github.com/sodex-tech/sodex-go-sdk/common/types"
-	types "github.com/sodex-tech/sodex-go-sdk/perps/types"
+	"github.com/sodex-tech/sodex-go-sdk-public/common/signer"
+	ctypes "github.com/sodex-tech/sodex-go-sdk-public/common/types"
+	types "github.com/sodex-tech/sodex-go-sdk-public/perps/types"
 )
 
 // Signer signs perps-engine action requests using the Bolt EIP-712 domain.

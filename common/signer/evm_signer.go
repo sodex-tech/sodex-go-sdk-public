@@ -9,8 +9,8 @@ import (
 	"crypto/ecdsa"
 
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/sodex-tech/sodex-go-sdk/common/enums"
-	"github.com/sodex-tech/sodex-go-sdk/common/types"
+	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
+	"github.com/sodex-tech/sodex-go-sdk-public/common/types"
 )
 
 // EVMSigner performs EIP-712 signing and signature verification using an

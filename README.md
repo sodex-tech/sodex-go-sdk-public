@@ -9,7 +9,7 @@ Official Go SDK for the Sodex exchange. Provides EIP-712 request signing for bot
 ## Installation
 
 ```bash
-go get github.com/sodex-tech/sodex-go-sdk
+go get github.com/sodex-tech/sodex-go-sdk-public
 ```
 
 ## Overview
@@ -70,9 +70,9 @@ import (
     "github.com/ethereum/go-ethereum/crypto"
     "github.com/shopspring/decimal"
 
-    ssigner "github.com/sodex-tech/sodex-go-sdk/spot/signer"
-    stypes  "github.com/sodex-tech/sodex-go-sdk/spot/types"
-    "github.com/sodex-tech/sodex-go-sdk/common/enums"
+    ssigner "github.com/sodex-tech/sodex-go-sdk-public/spot/signer"
+    stypes  "github.com/sodex-tech/sodex-go-sdk-public/spot/types"
+    "github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 )
 
 privateKey, err := crypto.HexToECDSA("your-private-key-hex")
@@ -109,9 +109,9 @@ import (
     "github.com/ethereum/go-ethereum/crypto"
     "github.com/shopspring/decimal"
 
-    psigner "github.com/sodex-tech/sodex-go-sdk/perps/signer"
-    ptypes  "github.com/sodex-tech/sodex-go-sdk/perps/types"
-    "github.com/sodex-tech/sodex-go-sdk/common/enums"
+    psigner "github.com/sodex-tech/sodex-go-sdk-public/perps/signer"
+    ptypes  "github.com/sodex-tech/sodex-go-sdk-public/perps/types"
+    "github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 )
 
 privateKey, err := crypto.HexToECDSA("your-private-key-hex")

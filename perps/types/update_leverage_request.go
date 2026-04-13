@@ -1,6 +1,6 @@
 package types
 
-import "github.com/sodex-tech/sodex-go-sdk/common/enums"
+import "github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 
 const UpdateLeverageRequestTypeName = "updateLeverage"
 

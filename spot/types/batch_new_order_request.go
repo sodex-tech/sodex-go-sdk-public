@@ -2,7 +2,7 @@ package types
 
 import (
 	"github.com/shopspring/decimal"
-	"github.com/sodex-tech/sodex-go-sdk/common/enums"
+	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 )
 
 const BatchNewOrderRequestTypeName = "batchNewOrder"

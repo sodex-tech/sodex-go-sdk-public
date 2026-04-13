@@ -21,9 +21,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/sodex-tech/sodex-go-sdk/common/enums"
-	"github.com/sodex-tech/sodex-go-sdk/common/signer"
-	"github.com/sodex-tech/sodex-go-sdk/common/types"
+	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
+	"github.com/sodex-tech/sodex-go-sdk-public/common/signer"
+	"github.com/sodex-tech/sodex-go-sdk-public/common/types"
 )
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────

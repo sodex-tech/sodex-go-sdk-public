@@ -14,12 +14,12 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/shopspring/decimal"
 
-	"github.com/sodex-tech/sodex-go-sdk/common/enums"
-	ctypes "github.com/sodex-tech/sodex-go-sdk/common/types"
-	perpsSigner "github.com/sodex-tech/sodex-go-sdk/perps/signer"
-	perpsTypes "github.com/sodex-tech/sodex-go-sdk/perps/types"
-	spotSigner "github.com/sodex-tech/sodex-go-sdk/spot/signer"
-	spotTypes "github.com/sodex-tech/sodex-go-sdk/spot/types"
+	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
+	ctypes "github.com/sodex-tech/sodex-go-sdk-public/common/types"
+	perpsSigner "github.com/sodex-tech/sodex-go-sdk-public/perps/signer"
+	perpsTypes "github.com/sodex-tech/sodex-go-sdk-public/perps/types"
+	spotSigner "github.com/sodex-tech/sodex-go-sdk-public/spot/signer"
+	spotTypes "github.com/sodex-tech/sodex-go-sdk-public/spot/types"
 )
 
 // chainID is the chain ID for the Sodex exchange.

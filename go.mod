@@ -1,9 +1,10 @@
-module github.com/sodex-tech/sodex-go-sdk
+module github.com/sodex-tech/sodex-go-sdk-public
 
 go 1.25.0
 
 require (
 	github.com/ethereum/go-ethereum v1.17.2
+	github.com/gorilla/websocket v1.5.3
 	github.com/shopspring/decimal v1.4.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
