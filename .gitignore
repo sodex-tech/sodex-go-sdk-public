@@ -6,6 +6,8 @@
 *.dylib
 /bin/
 /dist/
+# CLI binary produced by `go build ./cmd/sodex` at repo root
+/sodex
 
 # Test output
 *.test
