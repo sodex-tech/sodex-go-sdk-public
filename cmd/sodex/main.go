@@ -463,11 +463,12 @@ func newOrderBookCmd(g *globalFlags) *cobra.Command {
 		Use:   "orderbook [spot|perps] SYMBOL",
 		Short: "Show order book for a symbol",
 		Long: `Show the order book for a trading pair.
-The engine argument defaults to spot. SYMBOL is the human-readable pair (e.g. BTC-USDT).
+The engine argument defaults to spot. SYMBOL is the human-readable pair
+(e.g. BTC/USDC for spot, BTC-USD for perps).
 
 Examples:
-  sodex orderbook BTC-USDT
-  sodex orderbook perps BTC-USDT --depth 10`,
+  sodex orderbook BTC/USDC
+  sodex orderbook perps BTC-USD --depth 10`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var engine, symbol string
@@ -724,18 +725,19 @@ func newOrdersPlaceCmd(g *globalFlags) *cobra.Command {
 		Short: "Place a new order",
 		Long: `Place a new order on the spot or perps engine.
 
-The symbol is resolved by name (e.g. BTC-USDT) against the live market list.
+The symbol is resolved by name (e.g. BTC/USDC for spot, BTC-USD for perps)
+against the live market list.
 A private key is required (--private-key or SODEX_PRIVATE_KEY).
 
 Examples:
-  sodex orders place spot --symbol BTC-USDT --side buy --type limit --price 95000 --qty 0.01
-  sodex orders place perps --symbol BTC-USDT --side sell --type market --qty 0.1 --reduce-only
-  sodex orders place perps --symbol ETH-USDT --side buy --price 3500 --qty 1 --tif gtx`,
+  sodex orders place spot --symbol BTC/USDC --side buy --type limit --price 95000 --qty 0.01
+  sodex orders place perps --symbol BTC-USD --side sell --type market --qty 0.1 --reduce-only
+  sodex orders place perps --symbol ETH-USD --side buy --price 3500 --qty 1 --tif gtx`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			engine := resolveEngine(args)
 			if symbol == "" {
-				return fmt.Errorf("--symbol is required (e.g. --symbol BTC-USDT)")
+				return fmt.Errorf("--symbol is required (e.g. --symbol BTC-USD for perps, BTC/USDC for spot)")
 			}
 			accountID, err := resolveAccountID(g)
 			if err != nil {
@@ -837,7 +839,7 @@ Examples:
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&symbol, "symbol", "", "Trading pair (e.g. BTC-USDT) [required]")
+	cmd.Flags().StringVar(&symbol, "symbol", "", "Trading pair (e.g. BTC-USD for perps, BTC/USDC for spot) [required]")
 	cmd.Flags().StringVar(&sideStr, "side", "", "Order side: buy or sell [required]")
 	cmd.Flags().StringVar(&typeStr, "type", "limit", "Order type: limit or market")
 	cmd.Flags().StringVar(&priceStr, "price", "", "Limit price (required for limit orders)")
@@ -989,8 +991,8 @@ func newLeverageCmd(g *globalFlags) *cobra.Command {
 		Long: `Update the leverage multiplier for a perpetuals position.
 
 Examples:
-  sodex leverage BTC-USDT 10
-  sodex leverage ETH-USDT 5 --mode cross`,
+  sodex leverage BTC-USD 10
+  sodex leverage ETH-USD 5 --mode cross`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			symbol := args[0]
@@ -1733,7 +1735,8 @@ COMMANDS
 
   orderbook [spot|perps] SYMBOL [--depth N] [--format]
     Show the live order book for a trading pair.
-    Default depth: 20 levels. SYMBOL is the human-readable name (e.g. BTC-USDT).
+    Default depth: 20 levels. SYMBOL is the human-readable name
+    (e.g. BTC-USD for perps, BTC/USDC for spot).
 
   balance [spot|perps] [ADDRESS] [--format]
     Show asset balances. ADDRESS can be positional, --address, or derived from key.
@@ -1778,11 +1781,11 @@ COMMANDS
 COMMON WORKFLOWS
 ----------------
 
-1. Query all perps markets and find the symbolID for ETH-USDT:
-     sodex markets perps --format json | jq '.[] | select(.symbol=="ETH-USDT")'
+1. Query all perps markets and find the symbolID for ETH-USD:
+     sodex markets perps --format json | jq '.[] | select(.symbol=="ETH-USD")'
 
-2. Check current ticker for BTC-USDT on spot:
-     sodex tickers spot --format json | jq '.[] | select(.symbol=="BTC-USDT")'
+2. Check current ticker for BTC on spot (API returns the vBTC_vUSDC form):
+     sodex tickers spot --format json | jq '.[] | select(.symbol=="vBTC_vUSDC")'
 
 3. Get your spot balances:
      export SODEX_PRIVATE_KEY=0x<key>
@@ -1796,11 +1799,11 @@ COMMON WORKFLOWS
 
 5. Place a spot limit buy for 0.01 BTC at $95,000:
      sodex orders place spot \
-       --symbol BTC-USDT --side buy --price 95000 --qty 0.01
+       --symbol BTC/USDC --side buy --price 95000 --qty 0.01
 
 6. Place a perps market sell (close position) for 0.1 BTC:
      sodex orders place perps \
-       --symbol BTC-USDT --side sell --type market --qty 0.1 --reduce-only
+       --symbol BTC-USD --side sell --type market --qty 0.1 --reduce-only
 
 7. List open perps orders:
      sodex orders list perps --format table
@@ -1812,10 +1815,10 @@ COMMON WORKFLOWS
 9. Check perps positions:
      sodex positions --format json
 
-10. Set 10x leverage on ETH-USDT perps:
-     sodex leverage ETH-USDT 10
+10. Set 10x leverage on ETH-USD perps:
+     sodex leverage ETH-USD 10
 
-11. Transfer 100 USDT internally between sub-accounts:
+11. Transfer 100 USDC internally between sub-accounts:
      sodex transfer --from 1001 --to 1002 --coin 1 --amount 100
 
 ERROR MESSAGES

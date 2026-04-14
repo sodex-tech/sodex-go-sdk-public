@@ -33,14 +33,60 @@ WebSocket: `/ws/spot` and `/ws/perps`
 
 ## Quick Start
 
+Read-only commands (no wallet needed):
+
 ```bash
 go install github.com/sodex-tech/sodex-go-sdk-public/cmd/sodex@latest
-sodex --testnet account-id 0xYourWalletAddress    # Find account ID
-sodex --testnet balance spot 0xYourAddress         # Check balance
-sodex --testnet markets spot                       # List pairs
-sodex --testnet tickers perps                      # BTC price etc.
+sodex --testnet markets perps                      # List perps pairs
+sodex --testnet tickers perps                      # BTC-USD price etc.
 sodex --testnet orderbook perps BTC-USD --depth 5  # Order book
 ```
+
+## Set up for trading
+
+Assumes you already have a funded Sodex account. If not, deposit via the Sodex web UI first.
+
+1. **Create an API key** at https://sodex.com/apikeys. The UI returns a `keyName` and a `privateKey`. Store both securely — the private key is never shown again. **Never use your master wallet private key for trading — always create a separate API key.**
+
+2. **Look up your account ID** (use any terminal):
+   ```
+   sodex --testnet account-id 0xYourWalletAddress
+   ```
+   Output: `{ "accountID": 12345, "userID": 12345 }`
+
+3. **Configure environment variables** — pick the one for your shell:
+
+   **macOS / Linux (bash, zsh):**
+   ```bash
+   export SODEX_PRIVATE_KEY=0x...        # API key private key from step 1
+   export SODEX_API_KEY=my-bot-key-01    # API key name from step 1
+   export SODEX_ACCOUNT_ID=12345         # from step 2
+   export SODEX_TESTNET=1                # remove for mainnet
+   ```
+
+   **Windows PowerShell:**
+   ```powershell
+   $env:SODEX_PRIVATE_KEY = "0x..."
+   $env:SODEX_API_KEY     = "my-bot-key-01"
+   $env:SODEX_ACCOUNT_ID  = "12345"
+   $env:SODEX_TESTNET     = "1"
+   ```
+
+   **Windows cmd.exe:**
+   ```cmd
+   set SODEX_PRIVATE_KEY=0x...
+   set SODEX_API_KEY=my-bot-key-01
+   set SODEX_ACCOUNT_ID=12345
+   set SODEX_TESTNET=1
+   ```
+
+4. **Place your first order:**
+   ```
+   sodex balance perps
+   sodex orders place perps --symbol BTC-USD --side buy --type limit --price 70000 --qty 0.01
+   ```
+
+**Stay on testnet** until the full flow works end-to-end. Remove `SODEX_TESTNET` (or set to `0`) for mainnet.
 
 ## References
 
