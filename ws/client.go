@@ -27,8 +27,12 @@ type Handler func(push Push)
 // It manages the connection lifecycle, automatic reconnection,
 // and subscription routing.
 type Client struct {
-	url       string
-	conn      *websocket.Conn
+	url  string
+	conn *websocket.Conn
+	// writeMu serialises all WriteJSON/WriteMessage calls on conn.
+	// gorilla/websocket requires that concurrent writes be serialised; without
+	// this, sendSubscribe and the ping goroutine would race on the same conn.
+	writeMu   sync.Mutex
 	mu        sync.Mutex
 	subs      map[int64]*subscription
 	handlers  map[string][]int64 // channel identifier → subscription IDs
@@ -217,6 +221,16 @@ func (c *Client) Close() error {
 
 // ── internal ─────────────────────────────────────────────────────────────────
 
+// writeJSON serialises WriteJSON calls on conn. All writes to the WebSocket
+// must go through this method; gorilla/websocket does not permit concurrent
+// writes to the same connection.
+func (c *Client) writeJSON(conn *websocket.Conn, msg any) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
+	return conn.WriteJSON(msg)
+}
+
 func (c *Client) sendSubscribe(op string, id int64, params SubscribeParams) error {
 	raw, _ := json.Marshal(params)
 	msg := Request{Op: op, ID: id, Params: raw}
@@ -226,12 +240,17 @@ func (c *Client) sendSubscribe(op string, id int64, params SubscribeParams) erro
 	if conn == nil {
 		return nil // will re-subscribe on reconnect
 	}
-	_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
-	return conn.WriteJSON(msg)
+	return c.writeJSON(conn, msg)
 }
 
 func (c *Client) readLoop(ctx context.Context) {
-	// Start ping ticker.
+	// stopPing is closed when readLoop returns, causing the ping goroutine
+	// to exit immediately rather than lingering until the next pingInterval
+	// tick. This prevents two ping goroutines from overlapping across a
+	// reconnect and racing on WriteJSON.
+	stopPing := make(chan struct{})
+	defer close(stopPing)
+
 	pingTicker := time.NewTicker(pingInterval)
 	defer pingTicker.Stop()
 
@@ -245,10 +264,11 @@ func (c *Client) readLoop(ctx context.Context) {
 				if conn == nil {
 					return
 				}
-				_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
-				if err := conn.WriteJSON(Request{Op: "ping"}); err != nil {
+				if err := c.writeJSON(conn, Request{Op: "ping"}); err != nil {
 					return
 				}
+			case <-stopPing:
+				return
 			case <-ctx.Done():
 				return
 			case <-c.done:
