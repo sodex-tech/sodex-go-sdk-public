@@ -24,7 +24,7 @@ Wrap the request body in a type/params envelope:
 {"type":"<action>","params":{...request body...}}
 ```
 
-Action types: `newOrder`, `cancelOrder`, `transferAsset`, `updateLeverage`, `updateMargin`, `scheduleCancel`, `revokeAPIKey`.
+Action types: `newOrder`, `cancelOrder`, `transferAsset`, `updateLeverage`, `updateMargin`, `scheduleCancel`.
 
 ### Step 2: Compute payloadHash
 
@@ -79,9 +79,8 @@ Total length: 132 characters (0x + 01 + 128 hex chars).
 ## API Keys
 
 - Each master account supports up to 5 API keys
-- Create via Sodex web UI or on-chain via ClobGateway contract
+- Create and revoke keys via the Sodex web UI at https://sodex.com/
 - API keys are EVM addresses; sign with the API key's private key
-- `revokeAPIKey` action must be signed with the master account key
 
 ## Signing Example
 

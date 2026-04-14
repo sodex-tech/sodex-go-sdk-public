@@ -53,6 +53,7 @@ Detailed documentation for each use case is in `references/`. Read the relevant 
 | Trading | [trading.md](https://raw.githubusercontent.com/sodex-tech/sodex-go-sdk-public/main/references/trading.md) | Yes | User wants to place/cancel orders, set leverage, transfer funds |
 | WebSocket | [websocket.md](https://raw.githubusercontent.com/sodex-tech/sodex-go-sdk-public/main/references/websocket.md) | No | User wants real-time streaming data or live order/fill updates |
 | Authentication | [authentication.md](https://raw.githubusercontent.com/sodex-tech/sodex-go-sdk-public/main/references/authentication.md) | — | You need to sign a request to the REST API directly (not via CLI) |
+| Privy integration | [privy.md](https://raw.githubusercontent.com/sodex-tech/sodex-go-sdk-public/main/references/privy.md) | — | User uses Privy embedded wallets or server wallets to sign Sodex trades |
 
 ## When to Use Which Reference
 
@@ -63,6 +64,7 @@ Detailed documentation for each use case is in `references/`. Read the relevant 
 | "Buy 0.1 BTC" / "Cancel my order" / "Set leverage to 10x" / "Transfer funds" | trading.md |
 | "Stream BTC trades" / "Watch the order book live" / "Monitor my fills" | websocket.md |
 | Implementing REST API signing directly (rare — prefer CLI) | authentication.md |
+| "I'm using Privy" / "embedded wallet" / "server wallet" / "sign via Privy" | privy.md |
 
 ## Security Rules
 
@@ -140,4 +142,4 @@ DecimalString: prices and quantities are JSON **strings** (`"95000"` not `95000`
 ## Links
 
 - Go SDK: https://github.com/sodex-tech/sodex-go-sdk-public
-- Web app: https://app.sodex.tech
+- Web app: https://sodex.com/
