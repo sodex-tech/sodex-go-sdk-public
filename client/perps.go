@@ -188,6 +188,48 @@ func (c *Client) CancelPerpsOrders(ctx context.Context, req *ptypes.CancelOrderR
 	return result, nil
 }
 
+// ModifyPerpsOrder modifies a single resting perpetuals order's price, quantity,
+// or stop price without cancelling and re-placing it. Identify the target order
+// via OrderID or ClOrdID (exactly one).
+func (c *Client) ModifyPerpsOrder(
+	ctx context.Context, req *ptypes.ModifyOrderRequest,
+) (*ModifyOrderResult, error) {
+	if c.perpsSgn == nil {
+		return nil, ErrNotAuthenticated
+	}
+	nonce := c.nonce()
+	sig, err := c.perpsSgn.SignModifyOrderRequest(req, nonce)
+	if err != nil {
+		return nil, fmt.Errorf("perps: sign modify order: %w", err)
+	}
+	var result ModifyOrderResult
+	if err := c.postSigned(ctx, perpsBase+"/trade/orders/modify", req, sig, nonce, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ReplacePerpsOrders atomically replaces a batch of resting perpetuals orders.
+// Each replacement cancels the original and places a new one; if the new order
+// is rejected (e.g. invalid price), the original is also cancelled.
+func (c *Client) ReplacePerpsOrders(
+	ctx context.Context, req *ctypes.ReplaceOrderRequest,
+) ([]PlaceOrderResult, error) {
+	if c.perpsSgn == nil {
+		return nil, ErrNotAuthenticated
+	}
+	nonce := c.nonce()
+	sig, err := c.perpsSgn.SignReplaceOrderRequest(req, nonce)
+	if err != nil {
+		return nil, fmt.Errorf("perps: sign replace order: %w", err)
+	}
+	var result []PlaceOrderResult
+	if err := c.postSigned(ctx, perpsBase+"/trade/orders/replace", req, sig, nonce, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // UpdateLeverage changes leverage for a perpetuals position.
 func (c *Client) UpdateLeverage(ctx context.Context, req *ptypes.UpdateLeverageRequest) (*LeverageResult, error) {
 	if c.perpsSgn == nil {

@@ -176,6 +176,14 @@ type LeverageResult struct {
 	MarginMode string `json:"marginMode"`
 }
 
+// ModifyOrderResult is the response from the perps modify-order endpoint.
+// Code == 0 indicates the modification was accepted by the engine; a non-zero
+// Code means the engine rejected the modification and Error explains why.
+type ModifyOrderResult struct {
+	Code  int    `json:"code"`
+	Error string `json:"error,omitempty"`
+}
+
 // Candle is a single OHLCV bar returned by the klines endpoint.
 // Field JSON tags are single letters for wire-size reasons (matches API output).
 type Candle struct {
@@ -232,7 +240,6 @@ type FundingPayment struct {
 // All fields are optional — zero values mean "omit from the query".
 type HistoryFilter struct {
 	Symbol    string // filter by trading pair (engine-native format, e.g. "BTC-USD" or "vBTC_vUSDC")
-	OrderID   uint64 // filter trades by a specific order (UserTrades only)
 	StartTime int64  // inclusive lower bound, unix milliseconds
 	EndTime   int64  // inclusive upper bound, unix milliseconds
 	Limit     int    // max number of rows to return (API caps at 1000)

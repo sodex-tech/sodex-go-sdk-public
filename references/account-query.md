@@ -47,7 +47,7 @@ Prefix with `/api/v1/spot` or `/api/v1/perps`. Optional query param `accountID` 
 | `GET /accounts/{address}/orders` | Open orders. Optional: `?symbol=X` |
 | `GET /accounts/{address}/positions` | Open positions (perps only) |
 | `GET /accounts/{address}/orders/history` | Historical orders. Optional: `symbol`, `startTime`, `endTime`, `limit` |
-| `GET /accounts/{address}/trades` | Trade history. Optional: `symbol`, `orderID`, `startTime`, `endTime`, `limit` |
+| `GET /accounts/{address}/trades` | Trade history. Optional: `symbol`, `startTime`, `endTime`, `limit` |
 | `GET /accounts/{address}/fee-rate` | Fee tier info |
 | `GET /accounts/{address}/api-keys` | API key list |
 | `GET /accounts/{address}/funding-history` | Funding payments (perps only) |

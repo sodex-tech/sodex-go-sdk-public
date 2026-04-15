@@ -209,9 +209,6 @@ func (c *Client) getHistory(ctx context.Context, path string, filter HistoryFilt
 	if filter.Symbol != "" {
 		q.Set("symbol", filter.Symbol)
 	}
-	if filter.OrderID > 0 {
-		q.Set("orderID", strconv.FormatUint(filter.OrderID, 10))
-	}
 	if filter.StartTime > 0 {
 		q.Set("startTime", strconv.FormatInt(filter.StartTime, 10))
 	}
