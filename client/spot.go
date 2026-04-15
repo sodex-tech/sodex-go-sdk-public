@@ -56,6 +56,42 @@ func (c *Client) SpotOrderBook(ctx context.Context, symbol string, depth int) (*
 	return &result, nil
 }
 
+// SpotKlines returns historical OHLCV candles for a spot symbol.
+//
+// symbol is the internal name (e.g. "vBTC_vUSDC").
+// interval is one of: "1m","3m","5m","15m","30m","1h","2h","4h","6h","8h","12h",
+// "1D","3D","1W","1M".
+// Only filter.StartTime / filter.EndTime / filter.Limit apply (default 500, max 1500).
+func (c *Client) SpotKlines(
+	ctx context.Context, symbol, interval string, filter HistoryFilter,
+) ([]Candle, error) {
+	return c.klines(ctx, spotBase, symbol, interval, filter)
+}
+
+// SpotPublicTrades returns recent market trades for a spot symbol.
+// Only limit applies (default 50, max 500).
+func (c *Client) SpotPublicTrades(
+	ctx context.Context, symbol string, limit int,
+) ([]PublicTrade, error) {
+	return c.publicTrades(ctx, spotBase, symbol, limit)
+}
+
+// SpotOrdersHistory returns historical (non-open) orders for address on the spot engine.
+// Supports filtering by symbol, time range, and limit.
+func (c *Client) SpotOrdersHistory(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]Order, error) {
+	return c.ordersHistory(ctx, spotBase, address, filter)
+}
+
+// SpotUserTrades returns the user's trade (fill) history on the spot engine.
+// Supports filtering by symbol, orderID, time range, and limit.
+func (c *Client) SpotUserTrades(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]UserTrade, error) {
+	return c.userTrades(ctx, spotBase, address, filter)
+}
+
 // SpotAccountInfo returns the account ID and user ID for the given address.
 func (c *Client) SpotAccountInfo(ctx context.Context, address string) (*AccountInfo, error) {
 	var result AccountInfo
@@ -159,6 +195,23 @@ func (c *Client) SpotTransfer(ctx context.Context, req *ctypes.TransferAssetRequ
 		return fmt.Errorf("spot: sign transfer: %w", err)
 	}
 	return c.postSigned(ctx, spotBase+"/accounts/transfers", req, sig, nonce, nil)
+}
+
+// ScheduleSpotCancel arms (or clears) a "dead-man's switch" that automatically
+// cancels all of the user's spot orders after scheduledTimestamp (unix ms).
+//
+// Pass a non-nil ScheduledTimestamp on req to arm the schedule, or nil to clear
+// an existing schedule. Re-sending with a future timestamp extends the deadline.
+func (c *Client) ScheduleSpotCancel(ctx context.Context, req *ctypes.ScheduleCancelRequest) error {
+	if c.spotSgn == nil {
+		return ErrNotAuthenticated
+	}
+	nonce := c.nonce()
+	sig, err := c.spotSgn.SignScheduleCancelRequest(req, nonce)
+	if err != nil {
+		return fmt.Errorf("spot: sign schedule cancel: %w", err)
+	}
+	return c.postSigned(ctx, spotBase+"/trade/orders/schedule-cancel", req, sig, nonce, nil)
 }
 
 // ── Convenience helpers ───────────────────────────────────────────────────────

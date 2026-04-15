@@ -86,6 +86,56 @@ func (c *Client) PerpsOrders(ctx context.Context, address string) ([]Order, erro
 	return result, nil
 }
 
+// PerpsKlines returns historical OHLCV candles for a perps symbol.
+//
+// interval is one of: "1m","3m","5m","15m","30m","1h","2h","4h","6h","8h","12h",
+// "1D","3D","1W","1M".
+//
+// Fields on HistoryFilter that apply: Symbol (ignored — pass via the symbol arg),
+// StartTime, EndTime, Limit (default 500, max 1500).
+func (c *Client) PerpsKlines(
+	ctx context.Context, symbol, interval string, filter HistoryFilter,
+) ([]Candle, error) {
+	return c.klines(ctx, perpsBase, symbol, interval, filter)
+}
+
+// PerpsPublicTrades returns recent market trades for a perps symbol.
+// Only Limit on the filter applies (default 50, max 500).
+func (c *Client) PerpsPublicTrades(
+	ctx context.Context, symbol string, limit int,
+) ([]PublicTrade, error) {
+	return c.publicTrades(ctx, perpsBase, symbol, limit)
+}
+
+// PerpsOrdersHistory returns historical (non-open) orders for address on the perps engine.
+// Supports filtering by symbol, time range, and limit.
+func (c *Client) PerpsOrdersHistory(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]Order, error) {
+	return c.ordersHistory(ctx, perpsBase, address, filter)
+}
+
+// PerpsUserTrades returns the authenticated user's trade (fill) history on the perps engine.
+// Supports filtering by symbol, orderID, time range, and limit.
+func (c *Client) PerpsUserTrades(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]UserTrade, error) {
+	return c.userTrades(ctx, perpsBase, address, filter)
+}
+
+// PerpsFundingHistory returns historical funding payments for the user's perps positions.
+// Filter supports Symbol, StartTime, EndTime, Limit.
+func (c *Client) PerpsFundingHistory(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]FundingPayment, error) {
+	var result []FundingPayment
+	path := fmt.Sprintf("%s/accounts/%s/fundings", perpsBase, address)
+	if err := c.getHistory(ctx, path, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // PerpsPositions returns all open positions for address.
 func (c *Client) PerpsPositions(ctx context.Context, address string) ([]Position, error) {
 	// Positions endpoint returns the same wrapper as orders.
@@ -179,6 +229,23 @@ func (c *Client) PerpsTransfer(ctx context.Context, req *ctypes.TransferAssetReq
 		return fmt.Errorf("perps: sign transfer: %w", err)
 	}
 	return c.postSigned(ctx, perpsBase+"/accounts/transfers", req, sig, nonce, nil)
+}
+
+// SchedulePerpsCancel arms (or clears) a "dead-man's switch" that automatically
+// cancels all of the user's perps orders after scheduledTimestamp (unix ms).
+//
+// Pass a non-nil ScheduledTimestamp on req to arm the schedule, or nil to clear
+// an existing schedule. Re-sending with a future timestamp extends the deadline.
+func (c *Client) SchedulePerpsCancel(ctx context.Context, req *ctypes.ScheduleCancelRequest) error {
+	if c.perpsSgn == nil {
+		return ErrNotAuthenticated
+	}
+	nonce := c.nonce()
+	sig, err := c.perpsSgn.SignScheduleCancelRequest(req, nonce)
+	if err != nil {
+		return fmt.Errorf("perps: sign schedule cancel: %w", err)
+	}
+	return c.postSigned(ctx, perpsBase+"/trade/orders/schedule-cancel", req, sig, nonce, nil)
 }
 
 // ── Convenience helpers ───────────────────────────────────────────────────────

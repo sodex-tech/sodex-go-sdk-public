@@ -175,3 +175,65 @@ type LeverageResult struct {
 	Leverage   int    `json:"leverage"`
 	MarginMode string `json:"marginMode"`
 }
+
+// Candle is a single OHLCV bar returned by the klines endpoint.
+// Field JSON tags are single letters for wire-size reasons (matches API output).
+type Candle struct {
+	StartTime   uint64  `json:"t"` // Bar start time (unix milliseconds)
+	Open        string  `json:"o"`
+	High        string  `json:"h"`
+	Low         string  `json:"l"`
+	Close       string  `json:"c"`
+	BaseVolume  string  `json:"v"`           // Total volume in base currency
+	QuoteVolume string  `json:"q"`           // Total volume in quote currency
+	Trades      *uint64 `json:"n,omitempty"` // Number of trades in the bar, when reported
+}
+
+// PublicTrade is a single recent market trade returned by the public trades endpoint.
+type PublicTrade struct {
+	TradeID   uint64  `json:"t"` // The trade ID
+	TradeTime uint64  `json:"T"` // Trade time in unix milliseconds
+	Symbol    string  `json:"s"`
+	Side      string  `json:"S"` // "BUY" or "SELL" — denotes the taker side
+	Price     string  `json:"p"`
+	Quantity  string  `json:"q"`
+	Buyer     *uint64 `json:"bi,omitempty"` // Buyer account ID (when returned)
+	Seller    *uint64 `json:"si,omitempty"` // Seller account ID (when returned)
+}
+
+// UserTrade is a single filled-order record for an account (private per-user trade history).
+// Distinct from PublicTrade which is market-wide.
+type UserTrade struct {
+	Symbol    string `json:"symbol"`
+	TradeID   uint64 `json:"tradeID"`
+	OrderID   uint64 `json:"orderID"`
+	ClOrdID   string `json:"clOrdID"`
+	Side      string `json:"side"`
+	Price     string `json:"price"`
+	Quantity  string `json:"quantity"`
+	Fee       string `json:"fee"`
+	FeeCoin   string `json:"feeCoin"`
+	Timestamp uint64 `json:"time"` // Trade time in unix milliseconds
+	IsMaker   bool   `json:"isMaker"`
+}
+
+// FundingPayment is a single funding payment debit/credit on a perps position.
+type FundingPayment struct {
+	Symbol       string `json:"symbol"`
+	PositionID   uint64 `json:"positionID"`
+	PositionSide string `json:"positionSide"`
+	FundingFee   string `json:"fundingFee"` // Positive = user paid; negative = user received
+	FeeCoin      string `json:"feeCoin"`
+	Timestamp    uint64 `json:"timestamp"`
+}
+
+// HistoryFilter captures the shared set of pagination/filter query parameters for
+// the history endpoints (orders/history, trades, fundings).
+// All fields are optional — zero values mean "omit from the query".
+type HistoryFilter struct {
+	Symbol    string // filter by trading pair (engine-native format, e.g. "BTC-USD" or "vBTC_vUSDC")
+	OrderID   uint64 // filter trades by a specific order (UserTrades only)
+	StartTime int64  // inclusive lower bound, unix milliseconds
+	EndTime   int64  // inclusive upper bound, unix milliseconds
+	Limit     int    // max number of rows to return (API caps at 1000)
+}

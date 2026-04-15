@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -186,6 +187,128 @@ func (c *Client) deleteSigned(ctx context.Context, path string, body any, sig []
 		req.Header.Set("X-API-Key", c.cfg.APIKeyName)
 	}
 	return c.do(req, result)
+}
+
+// ── shared history helpers ────────────────────────────────────────────────────
+//
+// The klines/trades/history endpoints follow a common query-param shape. These
+// helpers avoid repeating the same URL-building and decoding code across spot.go
+// and perps.go.
+
+// getHistory issues a GET with url.Values built from a HistoryFilter and decodes
+// the JSON response into result. Only fields the caller has set (non-zero) are
+// included on the wire; Symbol/OrderID are engine-independent so callers pass
+// them in the filter, but note: some endpoints (klines) ignore Symbol because
+// it is already encoded in the path.
+func (c *Client) getHistory(ctx context.Context, path string, filter HistoryFilter, result any) error {
+	u, err := url.Parse(c.cfg.BaseURL + path)
+	if err != nil {
+		return fmt.Errorf("client: parse history URL: %w", err)
+	}
+	q := u.Query()
+	if filter.Symbol != "" {
+		q.Set("symbol", filter.Symbol)
+	}
+	if filter.OrderID > 0 {
+		q.Set("orderID", strconv.FormatUint(filter.OrderID, 10))
+	}
+	if filter.StartTime > 0 {
+		q.Set("startTime", strconv.FormatInt(filter.StartTime, 10))
+	}
+	if filter.EndTime > 0 {
+		q.Set("endTime", strconv.FormatInt(filter.EndTime, 10))
+	}
+	if filter.Limit > 0 {
+		q.Set("limit", strconv.Itoa(filter.Limit))
+	}
+	u.RawQuery = q.Encode()
+	req, err := newGetReq(ctx, u.String())
+	if err != nil {
+		return err
+	}
+	return c.do(req, result)
+}
+
+// klines issues GET /<base>/markets/<symbol>/klines.
+func (c *Client) klines(
+	ctx context.Context, base, symbol, interval string, filter HistoryFilter,
+) ([]Candle, error) {
+	if interval == "" {
+		return nil, fmt.Errorf("client: klines: interval is required")
+	}
+	u, err := url.Parse(fmt.Sprintf("%s%s/markets/%s/klines", c.cfg.BaseURL, base, symbol))
+	if err != nil {
+		return nil, fmt.Errorf("client: parse klines URL: %w", err)
+	}
+	q := u.Query()
+	q.Set("interval", interval)
+	if filter.StartTime > 0 {
+		q.Set("startTime", strconv.FormatInt(filter.StartTime, 10))
+	}
+	if filter.EndTime > 0 {
+		q.Set("endTime", strconv.FormatInt(filter.EndTime, 10))
+	}
+	if filter.Limit > 0 {
+		q.Set("limit", strconv.Itoa(filter.Limit))
+	}
+	u.RawQuery = q.Encode()
+	req, err := newGetReq(ctx, u.String())
+	if err != nil {
+		return nil, err
+	}
+	var result []Candle
+	if err := c.do(req, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// publicTrades issues GET /<base>/markets/<symbol>/trades.
+func (c *Client) publicTrades(
+	ctx context.Context, base, symbol string, limit int,
+) ([]PublicTrade, error) {
+	u, err := url.Parse(fmt.Sprintf("%s%s/markets/%s/trades", c.cfg.BaseURL, base, symbol))
+	if err != nil {
+		return nil, fmt.Errorf("client: parse public trades URL: %w", err)
+	}
+	if limit > 0 {
+		q := u.Query()
+		q.Set("limit", strconv.Itoa(limit))
+		u.RawQuery = q.Encode()
+	}
+	req, err := newGetReq(ctx, u.String())
+	if err != nil {
+		return nil, err
+	}
+	var result []PublicTrade
+	if err := c.do(req, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// ordersHistory issues GET /<base>/accounts/<address>/orders/history.
+func (c *Client) ordersHistory(
+	ctx context.Context, base, address string, filter HistoryFilter,
+) ([]Order, error) {
+	var result []Order
+	path := fmt.Sprintf("%s/accounts/%s/orders/history", base, address)
+	if err := c.getHistory(ctx, path, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// userTrades issues GET /<base>/accounts/<address>/trades.
+func (c *Client) userTrades(
+	ctx context.Context, base, address string, filter HistoryFilter,
+) ([]UserTrade, error) {
+	var result []UserTrade
+	path := fmt.Sprintf("%s/accounts/%s/trades", base, address)
+	if err := c.getHistory(ctx, path, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // do executes req and decodes the response JSON into result.
