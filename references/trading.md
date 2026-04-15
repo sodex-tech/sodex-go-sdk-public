@@ -41,6 +41,31 @@ Time-in-force: `gtc` (default), `ioc`, `fok`, `gtx` (post-only).
 
 **⚠️ GTX (PostOnly) warning:** On Sodex, GTX orders may be partially filled before the remaining quantity is rejected. Check fill status after placement.
 
+**⚠️ No hedge mode.** Perps accounts run in one-way / netted mode: each account holds a single net position per pair. If you are long 1 BTC and send a sell 1 BTC order, the engine nets them to flat — it does NOT open an offsetting short. The `positionSide` field only accepts `BOTH` (1); `LONG` / `SHORT` values exist in the enum and appear on WebSocket fills but are rejected by the order-placement path. For delta-neutral strategies use two separate accounts.
+
+## Common Workflow: Place → Monitor → Cancel
+
+```bash
+# Place a resting limit order with a client-chosen ID so you can cancel it later.
+sodex orders place perps --symbol BTC-USD --side buy --type limit \
+    --price 70000 --qty 0.01 --cl-ord-id my-order-1
+
+# Poll open orders until filled (or subscribe to accountOrderUpdate — see websocket.md).
+sodex orders list perps --format json
+
+# If still unfilled, cancel by clOrdID (symbol-id from `sodex markets perps --format json`).
+sodex orders cancel perps --symbol-id 1 --cl-ord-id my-order-1
+```
+
+For always-on bots, additionally arm a dead-man's switch so positions are auto-cancelled if your process dies. This is a signed action, not yet in the CLI — use the SDK or REST directly:
+
+```
+POST /api/v1/perps/trade/orders/schedule-cancel
+Body: {"accountID": 43933, "scheduledTimestamp": 1776000060000}
+```
+
+Re-post with a new timestamp to extend the deadline; post without `scheduledTimestamp` to clear the schedule.
+
 ## REST Endpoints
 
 Prefix with `/api/v1/spot` or `/api/v1/perps`. Requires signed headers (see `references/authentication.md`).
@@ -49,7 +74,9 @@ Prefix with `/api/v1/spot` or `/api/v1/perps`. Requires signed headers (see `ref
 |----------|--------|---------------------|-------------|
 | `/trade/orders` | POST | `newOrder` | Place order(s) |
 | `/trade/orders/batch` | POST | `batchNewOrder` | Batch place (spot only) |
-| `/trade/orders/replace` | POST | `replaceOrder` | Modify existing orders |
+| `/trade/orders/modify` | POST | `modifyOrder` | Modify a single resting order (perps only — change price, qty, or stopPrice in-place) |
+| `/trade/orders/replace` | POST | `replaceOrder` | Atomically cancel + re-place a batch of orders |
+| `/trade/orders/schedule-cancel` | POST | `scheduleCancel` | Arm / clear a dead-man's switch that auto-cancels all orders after a timestamp |
 | `/trade/orders` | DELETE | `cancelOrder` | Cancel order(s) |
 | `/trade/orders/batch` | DELETE | `batchCancelOrder` | Batch cancel (spot only) |
 | `/accounts/transfers` | POST | `transferAsset` | Transfer between accounts |

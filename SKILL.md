@@ -106,11 +106,24 @@ Detailed documentation for each use case is in `references/`. Read the relevant 
 | User says... | Load |
 |-------------|------|
 | "What's the price of BTC?" / "Show me the order book" / "List all markets" | market-data.md |
+| "Show historical candles" / "Recent trades on BTC" (market-wide) | market-data.md |
 | "What's my balance?" / "Show my positions" / "What's my account ID?" | account-query.md |
+| "Show my trade history" / "Show my filled orders" / "Funding payments" (perps) | account-query.md |
 | "Buy 0.1 BTC" / "Cancel my order" / "Set leverage to 10x" / "Transfer funds" | trading.md |
+| "Modify my order" / "Replace this order with a different price" (perps) | trading.md |
+| "Auto-cancel all orders if my bot dies" / dead-man's switch | trading.md |
 | "Stream BTC trades" / "Watch the order book live" / "Monitor my fills" | websocket.md |
 | Implementing REST API signing directly (rare — prefer CLI) | authentication.md |
 | "I'm using Privy" / "embedded wallet" / "server wallet" / "sign via Privy" | privy.md |
+
+## Key Concepts: master wallet vs API key
+
+Two distinct keys are involved in any trading flow. Keep them clearly separated:
+
+- **Master wallet** — your primary EVM wallet (MetaMask, Privy embedded wallet, etc.). Holds deposited funds on-chain. Its address is what you pass to `sodex account-id 0x...` to look up your Sodex account ID.
+- **API key** — a secondary EVM keypair created in the Sodex web UI at https://sodex.com/apikeys. Used to sign trading requests. Has its own name (string) and private key (hex).
+
+At runtime, `SODEX_PRIVATE_KEY` holds the **API key's** private key (NOT the master wallet's), and `SODEX_API_KEY` holds the API key's name. The master wallet's private key should never appear in a bot's environment.
 
 ## Security Rules
 
@@ -145,6 +158,8 @@ These are the most frequent mistakes. Violating any of them will cause silent fa
 
 9. **v-byte conversion in ECDSA signature.** After signing EIP-712, convert v from 27/28 to 0/1 before prepending `0x01`. Forgetting this = invalid signature.
 
+10. **Perps runs in one-way (netted) mode — no hedge mode.** Each account holds a single net position per pair. Opening opposite-side orders on an existing position **nets** it (long 1 + sell 1 = flat), it does NOT create a simultaneous long+short. `PositionSide` only accepts `BOTH` (1) on new-order placement; the `LONG` / `SHORT` values in the enum appear on WebSocket fills but are rejected when placing orders. For delta-neutral strategies use two separate accounts.
+
 ## Agent Behavior Guidelines
 
 1. Always show current network (mainnet/testnet) when displaying account data.
@@ -170,7 +185,8 @@ OrderSide:     BUY=1, SELL=2
 OrderType:     LIMIT=1, MARKET=2
 TimeInForce:   GTC=1, FOK=2, IOC=3, GTX=4
 MarginMode:    ISOLATED=1, CROSS=2
-PositionSide:  BOTH=1
+PositionSide:  BOTH=1   ← only value accepted on new orders. LONG=2, SHORT=3 exist in the enum
+                         and appear on WebSocket fills, but are rejected when placing orders.
 Modifier:      NORMAL=1
 TransferType:  EVM_DEPOSIT=0, PERPS_DEPOSIT=1, EVM_WITHDRAW=2,
                PERPS_WITHDRAW=3, INTERNAL=4, SPOT_WITHDRAW=5, SPOT_DEPOSIT=6
