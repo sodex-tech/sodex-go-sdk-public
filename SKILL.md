@@ -48,11 +48,11 @@ Assumes you already have a funded Sodex account. If not, deposit via the Sodex w
 
 1. **Create an API key** at https://sodex.com/apikeys. The UI returns a `keyName` and a `privateKey`. Store both securely — the private key is never shown again. **Never use your master wallet private key for trading — always create a separate API key.**
 
-2. **Look up your account ID** (use any terminal):
+2. **Look up your account ID** — a numeric ID Sodex assigned to your wallet on first deposit. Every trading request needs it.
    ```
    sodex --testnet account-id 0xYourWalletAddress
    ```
-   Output: `{ "accountID": 12345, "userID": 12345 }`
+   Output: `{ "accountID": 12345, "userID": 12345 }`. Copy the `accountID` number (not the address) into step 3.
 
 3. **Configure environment variables** — pick the one for your shell:
 
@@ -116,14 +116,29 @@ Detailed documentation for each use case is in `references/`. Read the relevant 
 | Implementing REST API signing directly (rare — prefer CLI) | authentication.md |
 | "I'm using Privy" / "embedded wallet" / "server wallet" / "sign via Privy" | privy.md |
 
-## Key Concepts: master wallet vs API key
+## Key Concepts: wallet address, account ID, and API key
 
-Two distinct keys are involved in any trading flow. Keep them clearly separated:
+Three identities come into play for every trade. They are **not interchangeable**:
 
-- **Master wallet** — your primary EVM wallet (MetaMask, Privy embedded wallet, etc.). Holds deposited funds on-chain. Its address is what you pass to `sodex account-id 0x...` to look up your Sodex account ID.
-- **API key** — a secondary EVM keypair created in the Sodex web UI at https://sodex.com/apikeys. Used to sign trading requests. Has its own name (string) and private key (hex).
+- **Master wallet** — your primary EVM wallet (MetaMask, Privy embedded wallet, etc.) and its 0x-prefixed address. Holds deposited funds on-chain. Long-lived, globally recognised.
+- **Account ID** — a small numeric ID (e.g. `12345`) that Sodex assigns to your master wallet on first deposit. It's what the matching engine uses to track positions, balances, and orders. One account ID per master wallet address; it never changes. Every order-placement / cancel / transfer payload carries an `accountID` field; every trading CLI command reads `SODEX_ACCOUNT_ID` or `--account-id`. Look it up with:
+  ```
+  sodex --testnet account-id 0xYourMasterWalletAddress
+  # → { "accountID": 12345, "userID": 12345 }
+  ```
+- **API key** — a secondary EVM keypair created in the Sodex web UI at https://sodex.com/apikeys. Used to sign trading requests. Has its own name (string) and private key (hex). Multiple API keys can sign for the same account ID.
 
-At runtime, `SODEX_PRIVATE_KEY` holds the **API key's** private key (NOT the master wallet's), and `SODEX_API_KEY` holds the API key's name. The master wallet's private key should never appear in a bot's environment.
+**Mental model:**
+
+```
+master wallet address  ──(one-to-one)──▶  account ID  ──(one-to-many)──▶  API keys
+       (0x…)                                (uint)                          (name + privateKey)
+       ↓                                     ↓                               ↓
+ holds funds                       used in every trade payload        signs every trade request
+ SODEX_ADDRESS                     SODEX_ACCOUNT_ID                   SODEX_PRIVATE_KEY + SODEX_API_KEY
+```
+
+At runtime, `SODEX_PRIVATE_KEY` holds the **API key's** private key (NOT the master wallet's). The master wallet's private key should never appear in a bot's environment — its only job is signing the one-time "create API key" transaction in the Sodex UI.
 
 ## Security Rules
 
