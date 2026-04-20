@@ -1,6 +1,10 @@
-# sodex-go-sdk
+# sodex-go-sdk-public
 
-Official Go SDK for the Sodex exchange. Provides EIP-712 request signing for both the **Spark** (spot) and **Bolt** (perpetuals) trading engines.
+Official Go SDK for the Sodex exchange. Provides:
+
+- **REST client** — a ready-to-use HTTP client for market data and authenticated trading across the **Spark** (spot) and **Bolt** (perpetuals) engines.
+- **WebSocket client** — an auto-reconnecting subscriber for real-time market data and account updates.
+- **EIP-712 signing** — low-level signing primitives for advanced users who want to sign requests without using the REST client.
 
 ## Requirements
 
@@ -12,15 +16,164 @@ Official Go SDK for the Sodex exchange. Provides EIP-712 request signing for bot
 go get github.com/sodex-tech/sodex-go-sdk-public
 ```
 
-## Overview
+## Quickstart
 
-Every authenticated action sent to the Sodex exchange must carry an EIP-712 signature. The SDK handles all cryptographic details so that callers only need to:
+### Market data (no key required)
 
-1. Build a typed request struct.
-2. Call the appropriate `Sign*` method with the current nonce.
-3. Attach the returned 66-byte signature to the HTTP request header.
+```go
+import (
+    "context"
+    "fmt"
+    "log"
 
-### Signing Pipeline
+    "github.com/sodex-tech/sodex-go-sdk-public/client"
+)
+
+func main() {
+    c := client.New(client.Config{BaseURL: client.TestnetBaseURL})
+
+    tickers, err := c.PerpsTickers(context.Background())
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, t := range tickers[:3] {
+        fmt.Printf("%s last=%s vol=%s\n", t.Symbol, t.LastPrice, t.Volume)
+    }
+}
+```
+
+### Authenticated trading
+
+```go
+import (
+    "context"
+    "log"
+
+    "github.com/ethereum/go-ethereum/crypto"
+    "github.com/shopspring/decimal"
+
+    "github.com/sodex-tech/sodex-go-sdk-public/client"
+    "github.com/sodex-tech/sodex-go-sdk-public/common/enums"
+)
+
+func main() {
+    pk, err := crypto.HexToECDSA("your-private-key-hex")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    c := client.New(client.Config{
+        BaseURL:    client.TestnetBaseURL,
+        ChainID:    client.TestnetChainID,
+        PrivateKey: pk,
+    })
+
+    // One-call helper for a single limit order.
+    res, err := c.PlacePerpsLimitOrder(
+        context.Background(),
+        /* accountID */ 1001,
+        /* symbolID  */ 1,
+        /* clOrdID   */ "my-order-001",
+        enums.OrderSideBuy,
+        enums.PositionSideLong,
+        enums.TimeInForceGTC,
+        decimal.NewFromFloat(50000.0),
+        decimal.NewFromFloat(0.01),
+        /* reduceOnly */ false,
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+    log.Printf("placed: %+v", res)
+}
+```
+
+### WebSocket subscription
+
+```go
+import (
+    "context"
+    "log"
+
+    "github.com/sodex-tech/sodex-go-sdk-public/ws"
+)
+
+func main() {
+    w, err := ws.NewClient(client.TestnetBaseURL, "perps")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    _, err = w.Subscribe(
+        ws.SubscribeParams{Channel: ws.ChannelTrade, Symbol: "BTC-USD"},
+        func(push ws.Push) { log.Printf("%s %s", push.Channel, string(push.Data)) },
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Connect blocks until the context is cancelled.
+    log.Fatal(w.Connect(context.Background()))
+}
+```
+
+More complete examples live in [`examples/`](./examples):
+
+| Path | Shows |
+|---|---|
+| [`examples/rest/trade`](./examples/rest/trade) | Place + cancel a perps limit order |
+| [`examples/rest/account`](./examples/rest/account) | Query balances, orders, positions |
+| [`examples/ws/subscribe`](./examples/ws/subscribe) | Subscribe to trades + order book |
+| [`examples/signer`](./examples/signer) | Low-level EIP-712 signing only |
+
+## Packages
+
+```
+sodex-go-sdk-public/
+├── client/          # REST client (perps + spot, market data + trading)
+├── ws/              # WebSocket client (auto-reconnect, channel routing)
+├── common/
+│   ├── enums/       # Shared enums (OrderSide, OrderType, TimeInForce, …)
+│   ├── types/       # Shared request types (Transfer, Replace, ScheduleCancel)
+│   └── signer/      # Engine-agnostic EVMSigner core
+├── perps/
+│   ├── types/       # Bolt-specific request types
+│   └── signer/      # Bolt signer — "futures" EIP-712 domain
+├── spot/
+│   ├── types/       # Spark-specific request types
+│   └── signer/      # Spark signer — "spot" EIP-712 domain
+├── cmd/sodex/       # CLI tool (built on top of the SDK)
+└── examples/        # Runnable end-to-end examples
+```
+
+Most users only need `client/`, `ws/`, and `common/enums`. The `perps/`, `spot/`, and `common/types` packages are only needed when building custom order request structs by hand.
+
+## Configuration
+
+Exported constants in `client/`:
+
+| Constant | Value |
+|---|---|
+| `client.DefaultBaseURL` | `https://mainnet-gw.sodex.dev` |
+| `client.TestnetBaseURL` | `https://testnet-gw.sodex.dev` |
+| `client.DefaultChainID` | `286623` (mainnet) |
+| `client.TestnetChainID` | `138565` (testnet) |
+
+`client.Config` fields:
+
+- `BaseURL` — API root. Defaults to mainnet if empty.
+- `ChainID` — EVM chain ID for EIP-712 domain separation. Defaults to mainnet.
+- `PrivateKey` — `*ecdsa.PrivateKey`. Leave nil for read-only access.
+- `APIKeyName` — optional API key name (sets `X-API-Key` on signed requests). Empty = master-wallet auth.
+- `HTTPClient` — optional custom `*http.Client`. Defaults to a 30-second-timeout client.
+
+The client tracks a strictly-monotonic millisecond nonce internally, so callers never manage nonces when using the REST client.
+
+## Advanced: low-level signing
+
+Every authenticated action sent to the Sodex exchange must carry an EIP-712 signature. The `client` package handles this automatically, but the `spot/signer` and `perps/signer` packages expose the primitives directly for callers who build their own HTTP layer.
+
+### Signing pipeline
 
 ```
 ActionPayload{type, params}
@@ -36,7 +189,7 @@ crypto.Sign(digest, privateKey)
 
 Each engine uses its own EIP-712 domain (name `"spot"` for Spark, `"futures"` for Bolt), so a signature produced for one engine is cryptographically invalid on the other.
 
-### Wire Format
+### Wire format
 
 Every signature returned by the SDK is exactly **66 bytes**:
 
@@ -45,25 +198,7 @@ Every signature returned by the SDK is exactly **66 bytes**:
 | `[0]`   | 1      | `SignatureType` — always `0x01` (EIP-712) |
 | `[1:66]`| 65     | ECDSA signature: `r ‖ s ‖ v`             |
 
-## Package Layout
-
-```
-sodex-go-sdk/
-├── common/
-│   ├── enums/          # Shared enum types (OrderSide, OrderType, SignatureType, …)
-│   ├── types/          # Core EIP-712 primitives and shared request types
-│   └── signer/         # Engine-agnostic EVMSigner (signing & verification core)
-├── spot/
-│   ├── types/          # Spark-specific request types
-│   └── signer/         # Spark signer — wraps EVMSigner with the "spot" domain
-└── perps/
-    ├── types/          # Bolt-specific request types
-    └── signer/         # Bolt signer — wraps EVMSigner with the "futures" domain
-```
-
-## Usage
-
-### Spot (Spark Engine)
+### Spot (Spark engine)
 
 ```go
 import (
@@ -75,34 +210,29 @@ import (
     "github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 )
 
-privateKey, err := crypto.HexToECDSA("your-private-key-hex")
-if err != nil {
-    log.Fatal(err)
-}
+privateKey, _ := crypto.HexToECDSA("your-private-key-hex")
+s := ssigner.NewSigner(286623, privateKey)
 
-s := ssigner.NewSigner(286623, privateKey) // chainID 286623
-
-// Place a batch of limit buy orders
+price := decimal.NewFromFloat(50000.0)
+qty := decimal.NewFromFloat(0.1)
 req := &stypes.BatchNewOrderRequest{
     AccountID: 1001,
-    Orders: []*stypes.BatchNewOrderItem{
-        {
-            SymbolID:    42,
-            ClOrdID:     "order-001",
-            Side:        enums.OrderSideBuy,
-            Type:        enums.OrderTypeLimit,
-            TimeInForce: enums.TimeInForceGTC,
-            Price:       decimalPtr(decimal.NewFromFloat(50000.0)),
-            Quantity:    decimalPtr(decimal.NewFromFloat(0.1)),
-        },
-    },
+    Orders: []*stypes.BatchNewOrderItem{{
+        SymbolID:    42,
+        ClOrdID:     "order-001",
+        Side:        enums.OrderSideBuy,
+        Type:        enums.OrderTypeLimit,
+        TimeInForce: enums.TimeInForceGTC,
+        Price:       &price,
+        Quantity:    &qty,
+    }},
 }
 
 sig, err := s.SignBatchNewOrderRequest(req, nonce)
 // Attach sig to the HTTP request as the signature header.
 ```
 
-### Perps (Bolt Engine)
+### Perps (Bolt engine)
 
 ```go
 import (
@@ -114,65 +244,61 @@ import (
     "github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 )
 
-privateKey, err := crypto.HexToECDSA("your-private-key-hex")
-if err != nil {
-    log.Fatal(err)
-}
+privateKey, _ := crypto.HexToECDSA("your-private-key-hex")
+s := psigner.NewSigner(286623, privateKey)
 
-s := psigner.NewSigner(286623, privateKey) // chainID 286623
-
-// Place a perpetuals order
+price := decimal.NewFromFloat(50000.0)
+qty := decimal.NewFromFloat(1.0)
 req := &ptypes.NewOrderRequest{
     AccountID: 1001,
     SymbolID:  101,
-    Orders: []*ptypes.RawOrder{
-        {
-            ClOrdID:      "perp-001",
-            Side:         enums.OrderSideBuy,
-            Type:         enums.OrderTypeLimit,
-            TimeInForce:  enums.TimeInForceGTC,
-            Price:        decimalPtr(decimal.NewFromFloat(50000.0)),
-            Quantity:     decimalPtr(decimal.NewFromFloat(1.0)),
-            PositionSide: enums.PositionSideLong,
-        },
-    },
+    Orders: []*ptypes.RawOrder{{
+        ClOrdID:      "perp-001",
+        Side:         enums.OrderSideBuy,
+        Type:         enums.OrderTypeLimit,
+        TimeInForce:  enums.TimeInForceGTC,
+        Price:        &price,
+        Quantity:     &qty,
+        PositionSide: enums.PositionSideLong,
+    }},
 }
 
 sig, err := s.SignNewOrderRequest(req, nonce)
 ```
 
-## Supported Actions
+### Supported sign actions
 
-### Common (available on both engines)
+**Common** (both engines)
 
-| Method                      | Request Type              | Description                        |
-|-----------------------------|---------------------------|------------------------------------|
-| `SignTransferAssetRequest`  | `TransferAssetRequest`    | Inter-account asset transfer       |
-| `SignReplaceOrderRequest`   | `ReplaceOrderRequest`     | Batch order replacement            |
-| `SignScheduleCancelRequest` | `ScheduleCancelRequest`   | Scheduled mass cancellation        |
+| Method                      | Request type            |
+|-----------------------------|-------------------------|
+| `SignTransferAssetRequest`  | `TransferAssetRequest`  |
+| `SignReplaceOrderRequest`   | `ReplaceOrderRequest`   |
+| `SignScheduleCancelRequest` | `ScheduleCancelRequest` |
 
-### Spot (Spark engine only)
+**Spot (Spark)**
 
-| Method                        | Request Type              | Description              |
-|-------------------------------|---------------------------|--------------------------|
-| `SignBatchNewOrderRequest`    | `BatchNewOrderRequest`    | Batch order placement    |
-| `SignBatchCancelOrderRequest` | `BatchCancelOrderRequest` | Batch order cancellation |
+| Method                        | Request type              |
+|-------------------------------|---------------------------|
+| `SignBatchNewOrderRequest`    | `BatchNewOrderRequest`    |
+| `SignBatchCancelOrderRequest` | `BatchCancelOrderRequest` |
 
-### Perps (Bolt engine only)
+**Perps (Bolt)**
 
-| Method                     | Request Type            | Description                  |
-|----------------------------|-------------------------|------------------------------|
-| `SignNewOrderRequest`      | `NewOrderRequest`       | Order placement              |
-| `SignCancelOrderRequest`   | `CancelOrderRequest`    | Order cancellation           |
-| `SignUpdateLeverageRequest`| `UpdateLeverageRequest` | Position leverage adjustment |
-| `SignUpdateMarginRequest`  | `UpdateMarginRequest`   | Position margin adjustment   |
+| Method                      | Request type            |
+|-----------------------------|-------------------------|
+| `SignNewOrderRequest`       | `NewOrderRequest`       |
+| `SignCancelOrderRequest`    | `CancelOrderRequest`    |
+| `SignModifyOrderRequest`    | `ModifyOrderRequest`    |
+| `SignUpdateLeverageRequest` | `UpdateLeverageRequest` |
+| `SignUpdateMarginRequest`   | `UpdateMarginRequest`   |
 
-## Nonce
+### Nonce
 
-The nonce is a monotonically increasing counter per account per engine. The exchange rejects any request whose nonce has already been consumed. Callers are responsible for tracking and incrementing the nonce; the SDK does not maintain any nonce state.
+The nonce is a millisecond unix timestamp, strictly monotonic per account per engine. The exchange rejects any nonce already consumed or outside the window `(now − 2 days, now + 1 day)`. The `client` package tracks the nonce automatically; when using the low-level signers directly, callers must supply it.
 
 ## Security
 
 - **Cross-engine replay protection** — the EIP-712 domain encodes the engine name (`"spot"` or `"futures"`), so a spot signature cannot be accepted by the perps engine.
-- **Session replay protection** — the nonce field in every `ExchangeAction` ensures that a captured signature cannot be re-submitted.
+- **Session replay protection** — the nonce field in every `ExchangeAction` ensures a captured signature cannot be re-submitted.
 - **Key handling** — private keys are passed by the caller on every `Sign*` call and are never stored inside the SDK.

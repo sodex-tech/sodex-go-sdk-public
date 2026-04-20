@@ -85,6 +85,12 @@ func (s *Signer) SignCancelOrderRequest(request *types.CancelOrderRequest, nonce
 	return s.signer.SignAction(request, nonce, s.privateKey)
 }
 
+// SignModifyOrderRequest signs a single-order modify request.
+// The nonce must be the caller's next valid nonce for the perps engine.
+func (s *Signer) SignModifyOrderRequest(request *types.ModifyOrderRequest, nonce uint64) ([]byte, error) {
+	return s.signer.SignAction(request, nonce, s.privateKey)
+}
+
 // SignUpdateLeverageRequest signs a position-leverage update request.
 // The nonce must be the caller's next valid nonce for the perps engine.
 func (s *Signer) SignUpdateLeverageRequest(request *types.UpdateLeverageRequest, nonce uint64) ([]byte, error) {
