@@ -63,8 +63,8 @@ func main() {
 	}
 	fmt.Printf("\nOpen positions (%d):\n", len(positions))
 	for _, p := range positions {
-		fmt.Printf("  %-12s side=%-5s qty=%-12s entry=%-12s mark=%-12s uPnL=%s\n",
-			p.Symbol, p.PositionSide, p.Quantity, p.EntryPrice, p.MarkPrice, p.UnrealizedPnl)
+		fmt.Printf("  %-12s side=%-5s size=%-12s avgEntry=%-12s initialMargin=%-12s realizedPnL=%s\n",
+			p.Symbol, p.PositionSide, p.Size, p.AvgEntryPrice, p.InitialMargin, p.RealizedPnL)
 	}
 
 	orders, err := c.PerpsOrders(ctx, address)

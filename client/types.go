@@ -102,6 +102,7 @@ type blockTimeWrapper struct {
 	BlockHeight int64           `json:"blockHeight"`
 	Balances    json.RawMessage `json:"balances,omitempty"`
 	Orders      json.RawMessage `json:"orders,omitempty"`
+	Positions   json.RawMessage `json:"positions,omitempty"`
 }
 
 // AccountInfo holds the account ID and user ID returned by the /state endpoint.
@@ -139,18 +140,27 @@ type Order struct {
 
 // Position represents an open perpetuals position.
 type Position struct {
-	Symbol        string `json:"symbol"`
-	SymbolID      uint64 `json:"symbolID"`
-	AccountID     uint64 `json:"accountID"`
-	PositionSide  string `json:"positionSide"`
-	Quantity      string `json:"quantity"`
-	EntryPrice    string `json:"entryPrice"`
-	MarkPrice     string `json:"markPrice"`
-	LiqPrice      string `json:"liquidationPrice"`
-	UnrealizedPnl string `json:"unrealizedPnl"`
+	ID           uint64 `json:"id"`
+	Symbol       string `json:"symbol"`
+	MarginMode   string `json:"marginMode"`
+	PositionSide string `json:"positionSide"`
+
+	Size          string `json:"size"`
+	InitialMargin string `json:"initialMargin"`
+	AvgEntryPrice string `json:"avgEntryPrice"`
+	CumOpenCost   string `json:"cumOpenCost"`
+	CumTradingFee string `json:"cumTradingFee"`
+	CumClosedSize string `json:"cumClosedSize"`
+	AvgClosePrice string `json:"avgClosePrice"`
+	MaxSize       string `json:"maxSize"`
+	RealizedPnL   string `json:"realizedPnL"`
+
 	Leverage      int    `json:"leverage"`
-	MarginMode    string `json:"marginMode"`
-	Margin        string `json:"margin"`
+	Active        bool   `json:"active"`
+	IsTakenOver   bool   `json:"isTakenOver"`
+	TakeOverPrice string `json:"takeOverPrice"`
+	CreatedAt     uint64 `json:"createdAt"`
+	UpdatedAt     uint64 `json:"updatedAt"`
 }
 
 // PlaceOrderResult is a single entry in the response from order-placement endpoints.

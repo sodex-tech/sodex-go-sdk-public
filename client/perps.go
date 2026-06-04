@@ -138,14 +138,13 @@ func (c *Client) PerpsFundingHistory(
 
 // PerpsPositions returns all open positions for address.
 func (c *Client) PerpsPositions(ctx context.Context, address string) ([]Position, error) {
-	// Positions endpoint returns the same wrapper as orders.
 	var wrapper blockTimeWrapper
 	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/positions", perpsBase, address), &wrapper); err != nil {
 		return nil, err
 	}
 	var result []Position
-	if len(wrapper.Orders) > 0 {
-		if err := json.Unmarshal(wrapper.Orders, &result); err != nil {
+	if len(wrapper.Positions) > 0 {
+		if err := json.Unmarshal(wrapper.Positions, &result); err != nil {
 			return nil, fmt.Errorf("perps: parse positions: %w", err)
 		}
 	}
