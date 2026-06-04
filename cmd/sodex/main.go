@@ -362,18 +362,18 @@ func printPositions(positions []client.Position, f outputFormat) error {
 		return printJSON(positions)
 	case formatTable:
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "SYMBOL\tSIDE\tQTY\tENTRY\tMARK\tLIQ\tPNL\tLEVERAGE\tMARGIN")
+		fmt.Fprintln(w, "SYMBOL\tSIDE\tSIZE\tAVG_ENTRY\tINITIAL_MARGIN\tREALIZED_PNL\tLEVERAGE\tACTIVE")
 		for _, p := range positions {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%dx\t%s\n",
-				p.Symbol, p.PositionSide, p.Quantity, p.EntryPrice,
-				p.MarkPrice, p.LiqPrice, p.UnrealizedPnl, p.Leverage, p.Margin)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%dx\t%t\n",
+				p.Symbol, p.PositionSide, p.Size, p.AvgEntryPrice,
+				p.InitialMargin, p.RealizedPnL, p.Leverage, p.Active)
 		}
 		return w.Flush()
 	default:
 		for _, p := range positions {
-			fmt.Printf("%-20s  side=%-6s  qty=%-12s  entry=%-12s  mark=%-12s  pnl=%-12s  lev=%dx\n",
-				p.Symbol, p.PositionSide, p.Quantity, p.EntryPrice,
-				p.MarkPrice, p.UnrealizedPnl, p.Leverage)
+			fmt.Printf("%-20s  side=%-6s  size=%-12s  avgEntry=%-12s  initialMargin=%-12s  realizedPnL=%-12s  lev=%dx  active=%t\n",
+				p.Symbol, p.PositionSide, p.Size, p.AvgEntryPrice,
+				p.InitialMargin, p.RealizedPnL, p.Leverage, p.Active)
 		}
 		return nil
 	}
