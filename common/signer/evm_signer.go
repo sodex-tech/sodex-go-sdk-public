@@ -8,6 +8,7 @@ package signer
 import (
 	"crypto/ecdsa"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 	"github.com/sodex-tech/sodex-go-sdk-public/common/types"
@@ -24,14 +25,16 @@ import (
 type EVMSigner struct {
 	// domain is the EIP-712 domain for this engine instance.
 	// It is set once at construction and never mutated.
-	domain *types.EIP712Domain
+	domain          *types.EIP712Domain
+	universalDomain *types.EIP712Domain
 }
 
 // NewEVMSigner creates an EVMSigner bound to the provided EIP-712 domain.
 // Typically called by the engine-specific signer constructors with either
 // the Spark (spot) or Bolt (perps) domain.
 func NewEVMSigner(domain *types.EIP712Domain) *EVMSigner {
-	return &EVMSigner{domain: domain}
+	universalDomain := types.NewEIP712Domain(types.UniversalDomainName, domain.ChainID.Uint64())
+	return &EVMSigner{domain: domain, universalDomain: &universalDomain}
 }
 
 // RecoverPublicKeyFromRequest reconstructs the Ethereum address that signed a
@@ -57,6 +60,15 @@ func (s *EVMSigner) RecoverPublicKeyFromRequest(params types.ActionPayloadParams
 	}
 	if signature[0] != byte(enums.SignatureTypeEIP712) {
 		return nil, types.ErrInvalidSignatureType
+	}
+
+	if request, ok := params.(*types.AddAPIKeyRequest); ok {
+		action := &types.AddAPIKey{AddAPIKeyRequest: *request, Nonce: nonce}
+		address, err := types.RecoverAddAPIKeySigner(action, s.domain, signature[1:])
+		if err != nil {
+			return nil, err
+		}
+		return address.Bytes(), nil
 	}
 
 	ap := &types.ActionPayload{
@@ -101,7 +113,13 @@ func (s *EVMSigner) recoverPublicKey(ap *types.ActionPayload, nonce uint64, sign
 // The nonce must be the caller's current valid nonce; the exchange rejects
 // requests with a stale or already-consumed nonce.
 func (s *EVMSigner) SignAction(params types.ActionPayloadParams, nonce uint64, privateKey *ecdsa.PrivateKey) ([]byte, error) {
-	signature, err := s.signExchangeAction(params, nonce, privateKey)
+	var signature []byte
+	var err error
+	if request, ok := params.(*types.AddAPIKeyRequest); ok {
+		signature, err = s.signAddAPIKeyActionV1(request, nonce, privateKey)
+	} else {
+		signature, err = s.signExchangeAction(params, nonce, privateKey)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -128,4 +146,109 @@ func (s *EVMSigner) signExchangeAction(params types.ActionPayloadParams, nonce u
 
 	hash := action.Hash(s.domain)
 	return crypto.Sign(hash.Bytes(), privateKey)
+}
+
+func (s *EVMSigner) signAddAPIKeyActionV1(params *types.AddAPIKeyRequest, nonce uint64, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	action := &types.AddAPIKey{AddAPIKeyRequest: *params, Nonce: nonce}
+	return crypto.Sign(action.Hash(s.domain).Bytes(), privateKey)
+}
+
+// SignAddAPIKeyAction signs an AddAPIKey action with the universal domain.
+func (s *EVMSigner) SignAddAPIKeyAction(params *types.AddAPIKeyRequest, nonce uint64, signatureChainID *uint64, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	var hash common.Hash
+	if signatureChainID != nil {
+		domain := types.NewEIP712Domain(types.UniversalDomainName, *signatureChainID)
+		action := &types.UserSignedAddAPIKeyAction{
+			UserSignedAction: types.UserSignedAction{ChainID: s.domain.ChainID.Uint64(), Nonce: nonce},
+			AddAPIKeyRequest: *params,
+		}
+		hash = action.Hash(&domain)
+	} else {
+		action := &types.AddAPIKey{AddAPIKeyRequest: *params, Nonce: nonce}
+		hash = action.Hash(s.universalDomain)
+	}
+	signature, err := crypto.Sign(hash.Bytes(), privateKey)
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte{byte(enums.SignatureTypeEIP712Universal)}, signature...), nil
+}
+
+// RecoverPublicKeyFromUserSignedAddAPIKeyAction recovers a universal AddAPIKey signer.
+func (s *EVMSigner) RecoverPublicKeyFromUserSignedAddAPIKeyAction(action *types.UserSignedAddAPIKeyAction, signature []byte, signatureChainID uint64) ([]byte, error) {
+	return recoverUniversalSigner(action.Hash(universalDomain(signatureChainID)).Bytes(), signature)
+}
+
+// RecoverPublicKeyFromUserSignedAddPermissionedAPIKeyAction recovers a permissioned API key signer.
+func (s *EVMSigner) RecoverPublicKeyFromUserSignedAddPermissionedAPIKeyAction(action *types.UserSignedAddPermissionedAPIKeyAction, signature []byte, signatureChainID uint64) ([]byte, error) {
+	return recoverUniversalSigner(action.Hash(universalDomain(signatureChainID)).Bytes(), signature)
+}
+
+// SignAddAPIKeyWithBuilderAction signs an add-API-key-with-builder action.
+func (s *EVMSigner) SignAddAPIKeyWithBuilderAction(params *types.AddAPIKeyWithBuilderRequest, nonce uint64, signatureChainID *uint64, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	action := &types.AddAPIKeyWithBuilderAction{
+		ChainID: s.domain.ChainID.Uint64(), Nonce: nonce, AddAPIKeyWithBuilderRequest: *params,
+	}
+	signature, err := crypto.Sign(action.Hash(s.universalDomainFor(signatureChainID)).Bytes(), privateKey)
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte{byte(enums.SignatureTypeEIP712Universal)}, signature...), nil
+}
+
+// SignAddPermissionedAPIKeyAction signs a permissioned API key action.
+func (s *EVMSigner) SignAddPermissionedAPIKeyAction(params *types.AddPermissionedAPIKeyRequest, nonce uint64, signatureChainID *uint64, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	action := &types.UserSignedAddPermissionedAPIKeyAction{
+		UserSignedAction:             types.UserSignedAction{ChainID: s.domain.ChainID.Uint64(), Nonce: nonce},
+		AddPermissionedAPIKeyRequest: *params,
+	}
+	signature, err := crypto.Sign(action.Hash(s.universalDomainFor(signatureChainID)).Bytes(), privateKey)
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte{byte(enums.SignatureTypeEIP712Universal)}, signature...), nil
+}
+
+// SignApproveBuilderFeeAction signs a builder fee approval action.
+func (s *EVMSigner) SignApproveBuilderFeeAction(params *types.ApproveBuilderFeeRequest, nonce uint64, signatureChainID *uint64, privateKey *ecdsa.PrivateKey) ([]byte, error) {
+	action := &types.ApproveBuilderFeeAction{
+		ChainID: s.domain.ChainID.Uint64(), Nonce: nonce, AccountID: params.AccountID,
+		BuilderID: params.BuilderID, MaxFeeRate: params.MaxFeeRate,
+	}
+	signature, err := crypto.Sign(action.Hash(s.universalDomainFor(signatureChainID)).Bytes(), privateKey)
+	if err != nil {
+		return nil, err
+	}
+	return append([]byte{byte(enums.SignatureTypeEIP712Universal)}, signature...), nil
+}
+
+func (s *EVMSigner) universalDomainFor(signatureChainID *uint64) *types.EIP712Domain {
+	if signatureChainID == nil {
+		return s.universalDomain
+	}
+	domain := types.NewEIP712Domain(types.UniversalDomainName, *signatureChainID)
+	return &domain
+}
+
+func universalDomain(chainID uint64) *types.EIP712Domain {
+	domain := types.NewEIP712Domain(types.UniversalDomainName, chainID)
+	return &domain
+}
+
+func recoverUniversalSigner(hash []byte, signature []byte) ([]byte, error) {
+	if len(signature) != 66 {
+		return nil, types.ErrInvalidSignatureLength
+	}
+	if signature[0] != byte(enums.SignatureTypeEIP712Universal) {
+		return nil, types.ErrInvalidSignatureType
+	}
+	publicKey, err := crypto.SigToPub(hash, signature[1:])
+	if err != nil {
+		return nil, err
+	}
+	address := crypto.PubkeyToAddress(*publicKey)
+	if address == (common.Address{}) {
+		return nil, types.ErrInvalidPublicKey
+	}
+	return address.Bytes(), nil
 }

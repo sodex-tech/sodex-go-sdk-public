@@ -3,6 +3,7 @@ package types
 import (
 	"github.com/shopspring/decimal"
 	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
+	ctypes "github.com/sodex-tech/sodex-go-sdk-public/common/types"
 )
 
 const BatchNewOrderRequestTypeName = "batchNewOrder"
@@ -20,8 +21,9 @@ type BatchNewOrderItem struct {
 
 // BatchNewOrderRequest represents a batch new order request
 type BatchNewOrderRequest struct {
-	AccountID uint64               `json:"accountID"`
-	Orders    []*BatchNewOrderItem `json:"orders"`
+	AccountID uint64                `json:"accountID"`
+	Orders    []*BatchNewOrderItem  `json:"orders"`
+	Builder   *ctypes.BuilderParams `json:"builder,omitempty"`
 }
 
 // ActionName returns the action name for the batch new order request

@@ -51,6 +51,26 @@ func NewSigner(chainID uint64, privateKey *ecdsa.PrivateKey) *Signer {
 // Their signatures are not interchangeable because each engine uses a different
 // EIP-712 domain (SpotDomainName vs. PerpsDomainName).
 
+// SignAddAPIKeyRequest signs the existing add API key request.
+func (s *Signer) SignAddAPIKeyRequest(request *ctypes.AddAPIKeyRequest, nonce uint64, signatureChainID *uint64) ([]byte, error) {
+	return s.signer.SignAddAPIKeyAction(request, nonce, signatureChainID, s.privateKey)
+}
+
+// SignAddAPIKeyWithBuilderRequest signs an add API key request with builder approval.
+func (s *Signer) SignAddAPIKeyWithBuilderRequest(request *ctypes.AddAPIKeyWithBuilderRequest, nonce uint64, signatureChainID *uint64) ([]byte, error) {
+	return s.signer.SignAddAPIKeyWithBuilderAction(request, nonce, signatureChainID, s.privateKey)
+}
+
+// SignAddPermissionedAPIKeyRequest signs a permissioned API key request.
+func (s *Signer) SignAddPermissionedAPIKeyRequest(request *ctypes.AddPermissionedAPIKeyRequest, nonce uint64, signatureChainID *uint64) ([]byte, error) {
+	return s.signer.SignAddPermissionedAPIKeyAction(request, nonce, signatureChainID, s.privateKey)
+}
+
+// SignApproveBuilderFeeRequest signs a builder fee approval request.
+func (s *Signer) SignApproveBuilderFeeRequest(request *ctypes.ApproveBuilderFeeRequest, nonce uint64, signatureChainID *uint64) ([]byte, error) {
+	return s.signer.SignApproveBuilderFeeAction(request, nonce, signatureChainID, s.privateKey)
+}
+
 // SignTransferAssetRequest signs an inter-account asset transfer request.
 // The nonce must be the caller's next valid nonce for the spot engine.
 func (s *Signer) SignTransferAssetRequest(request *ctypes.TransferAssetRequest, nonce uint64) ([]byte, error) {
@@ -76,6 +96,16 @@ func (s *Signer) SignScheduleCancelRequest(request *ctypes.ScheduleCancelRequest
 // SignBatchNewOrderRequest signs a batch of new-order placements in a single request.
 // The nonce must be the caller's next valid nonce for the spot engine.
 func (s *Signer) SignBatchNewOrderRequest(request *types.BatchNewOrderRequest, nonce uint64) ([]byte, error) {
+	return s.signer.SignAction(request, nonce, s.privateKey)
+}
+
+// SignNewTwapOrderRequest signs a TWAP order request.
+func (s *Signer) SignNewTwapOrderRequest(request *ctypes.NewTwapOrderRequest, nonce uint64) ([]byte, error) {
+	return s.signer.SignAction(request, nonce, s.privateKey)
+}
+
+// SignCancelTwapOrderRequest signs a TWAP cancellation request.
+func (s *Signer) SignCancelTwapOrderRequest(request *ctypes.CancelTwapOrderRequest, nonce uint64) ([]byte, error) {
 	return s.signer.SignAction(request, nonce, s.privateKey)
 }
 

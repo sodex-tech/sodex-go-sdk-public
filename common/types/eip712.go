@@ -23,7 +23,7 @@
 //
 // Signatures sent to the exchange are 66 bytes:
 //
-//	byte[0]    – SignatureType (always SignatureTypeEIP712 = 1)
+//	byte[0]    – SignatureType (engine-specific = 1, universal = 2)
 //	byte[1:66] – 65-byte ECDSA signature (r ‖ s ‖ v)
 package types
 
@@ -61,6 +61,9 @@ var (
 
 	// PerpsDomainName is the EIP-712 domain name for the Bolt perpetuals engine.
 	PerpsDomainName = "futures"
+
+	// UniversalDomainName is used by cross-engine account actions.
+	UniversalDomainName = "universal"
 )
 
 // EIP712Domain holds the parameters that uniquely identify a signing domain.
@@ -105,6 +108,11 @@ func DefaultSparkDomain() EIP712Domain {
 // on chain ID 286623.
 func DefaultBoltDomain() EIP712Domain {
 	return NewEIP712Domain(PerpsDomainName, 286623)
+}
+
+// DefaultUniversalDomain returns the production universal domain.
+func DefaultUniversalDomain() EIP712Domain {
+	return NewEIP712Domain(UniversalDomainName, 286623)
 }
 
 // DomainSeparator computes and caches the EIP-712 domain separator hash.
@@ -227,6 +235,220 @@ func RecoverExchangeActionSigner(payloadHash common.Hash, nonce uint64, domain *
 		return common.Address{}, err
 	}
 	address := crypto.PubkeyToAddress(*pubKey)
+	if address == (common.Address{}) {
+		return common.Address{}, ErrInvalidPublicKey
+	}
+	return address, nil
+}
+
+// UserSignedAction contains fields shared by user-signed universal actions.
+type UserSignedAction struct {
+	ChainID uint64 `json:"chainID"`
+	Nonce   uint64 `json:"nonce"`
+}
+
+func publicKeyBytes(publicKey string) []byte {
+	return common.FromHex(publicKey)
+}
+
+// UserSignedAddAPIKeyAction is the legacy user-signed add API key action.
+type UserSignedAddAPIKeyAction struct {
+	UserSignedAction
+	AddAPIKeyRequest
+}
+
+var UserSignedAddAPIKeyActionTypeHash = crypto.Keccak256Hash([]byte("UserSignedAddAPIKeyAction(uint64 chainID,uint64 nonce,uint64 accountID,string name,uint8 keyType,bytes publicKey,uint64 expiresAt)"))
+
+func (a *UserSignedAddAPIKeyAction) StructHash() common.Hash {
+	chainIDBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(chainIDBytes[24:], a.ChainID)
+	nonceBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(nonceBytes[24:], a.Nonce)
+	accountIDBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(accountIDBytes[24:], a.AccountID)
+	keyTypeBytes := make([]byte, 32)
+	keyTypeBytes[31] = uint8(a.Type)
+	expiresAtBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(expiresAtBytes[24:], a.ExpiresAt)
+
+	return crypto.Keccak256Hash(
+		UserSignedAddAPIKeyActionTypeHash.Bytes(),
+		chainIDBytes,
+		nonceBytes,
+		accountIDBytes,
+		crypto.Keccak256([]byte(a.Name)),
+		keyTypeBytes,
+		crypto.Keccak256(a.PublicKey),
+		expiresAtBytes,
+	)
+}
+
+func (a *UserSignedAddAPIKeyAction) Hash(domain *EIP712Domain) common.Hash {
+	return crypto.Keccak256Hash([]byte{0x19, 0x01}, domain.DomainSeparator().Bytes(), a.StructHash().Bytes())
+}
+
+// UserSignedAddPermissionedAPIKeyAction is the permissioned API key action.
+type UserSignedAddPermissionedAPIKeyAction struct {
+	UserSignedAction
+	AddPermissionedAPIKeyRequest
+}
+
+var UserSignedAddPermissionedAPIKeyActionTypeHash = crypto.Keccak256Hash([]byte("UserSignedAddPermissionedAPIKeyAction(uint64 chainID,uint64 nonce,uint64 accountID,string name,uint8 keyType,bytes publicKey,uint64 expiresAt,uint64 permissions)"))
+
+func (a *UserSignedAddPermissionedAPIKeyAction) StructHash() common.Hash {
+	chainIDBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(chainIDBytes[24:], a.ChainID)
+	nonceBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(nonceBytes[24:], a.Nonce)
+	accountIDBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(accountIDBytes[24:], a.AccountID)
+	keyTypeBytes := make([]byte, 32)
+	keyTypeBytes[31] = uint8(a.Type)
+	expiresAtBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(expiresAtBytes[24:], a.ExpiresAt)
+	permissionsBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(permissionsBytes[24:], a.Permissions)
+
+	return crypto.Keccak256Hash(
+		UserSignedAddPermissionedAPIKeyActionTypeHash.Bytes(),
+		chainIDBytes,
+		nonceBytes,
+		accountIDBytes,
+		crypto.Keccak256([]byte(a.Name)),
+		keyTypeBytes,
+		crypto.Keccak256(publicKeyBytes(a.PublicKey)),
+		expiresAtBytes,
+		permissionsBytes,
+	)
+}
+
+func (a *UserSignedAddPermissionedAPIKeyAction) Hash(domain *EIP712Domain) common.Hash {
+	return crypto.Keccak256Hash([]byte{0x19, 0x01}, domain.DomainSeparator().Bytes(), a.StructHash().Bytes())
+}
+
+// AddAPIKey is the original add API key typed action.
+type AddAPIKey struct {
+	AddAPIKeyRequest
+	Nonce uint64
+}
+
+var AddAPIKeyTypeHash = crypto.Keccak256Hash([]byte("AddAPIKey(uint64 accountID,string name,uint8 keyType,bytes publicKey,uint64 expiresAt,uint64 nonce)"))
+
+func (a *AddAPIKey) StructHash() common.Hash {
+	accountIDBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(accountIDBytes[24:], a.AccountID)
+	keyTypeBytes := make([]byte, 32)
+	keyTypeBytes[31] = uint8(a.Type)
+	expiresAtBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(expiresAtBytes[24:], a.ExpiresAt)
+	nonceBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(nonceBytes[24:], a.Nonce)
+
+	return crypto.Keccak256Hash(
+		AddAPIKeyTypeHash.Bytes(),
+		accountIDBytes,
+		crypto.Keccak256([]byte(a.Name)),
+		keyTypeBytes,
+		crypto.Keccak256(a.PublicKey),
+		expiresAtBytes,
+		nonceBytes,
+	)
+}
+
+func (a *AddAPIKey) Hash(domain *EIP712Domain) common.Hash {
+	return crypto.Keccak256Hash([]byte{0x19, 0x01}, domain.DomainSeparator().Bytes(), a.StructHash().Bytes())
+}
+
+// AddAPIKeyWithBuilderAction adds an API key and builder approval atomically.
+type AddAPIKeyWithBuilderAction struct {
+	ChainID uint64
+	Nonce   uint64
+	AddAPIKeyWithBuilderRequest
+}
+
+var AddAPIKeyWithBuilderActionTypeHash = crypto.Keccak256Hash([]byte("AddAPIKeyWithBuilder(uint64 chainID,uint64 nonce,uint64 accountID,string name,uint8 keyType,bytes publicKey,uint64 expiresAt,uint64 builderID,uint64 maxFeeRate)"))
+
+func (a *AddAPIKeyWithBuilderAction) StructHash() common.Hash {
+	chainIDBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(chainIDBytes[24:], a.ChainID)
+	nonceBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(nonceBytes[24:], a.Nonce)
+	accountIDBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(accountIDBytes[24:], a.AccountID)
+	keyTypeBytes := make([]byte, 32)
+	keyTypeBytes[31] = uint8(a.Type)
+	expiresAtBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(expiresAtBytes[24:], a.ExpiresAt)
+	builderIDBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(builderIDBytes[24:], a.Builder.BuilderID)
+	maxFeeRateBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(maxFeeRateBytes[24:], a.Builder.FeeRate)
+
+	return crypto.Keccak256Hash(
+		AddAPIKeyWithBuilderActionTypeHash.Bytes(),
+		chainIDBytes,
+		nonceBytes,
+		accountIDBytes,
+		crypto.Keccak256([]byte(a.Name)),
+		keyTypeBytes,
+		crypto.Keccak256(publicKeyBytes(a.PublicKey)),
+		expiresAtBytes,
+		builderIDBytes,
+		maxFeeRateBytes,
+	)
+}
+
+func (a *AddAPIKeyWithBuilderAction) Hash(domain *EIP712Domain) common.Hash {
+	return crypto.Keccak256Hash([]byte{0x19, 0x01}, domain.DomainSeparator().Bytes(), a.StructHash().Bytes())
+}
+
+// ApproveBuilderFeeAction approves or clears a builder fee.
+type ApproveBuilderFeeAction struct {
+	ChainID    uint64
+	Nonce      uint64
+	AccountID  uint64
+	BuilderID  uint64
+	MaxFeeRate uint64
+}
+
+var ApproveBuilderFeeActionTypeHash = crypto.Keccak256Hash([]byte("ApproveBuilderFeeAction(uint64 chainID,uint64 nonce,uint64 accountID,uint64 builderID,uint64 maxFeeRate)"))
+
+func (a *ApproveBuilderFeeAction) StructHash() common.Hash {
+	chainIDBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(chainIDBytes[24:], a.ChainID)
+	nonceBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(nonceBytes[24:], a.Nonce)
+	accountIDBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(accountIDBytes[24:], a.AccountID)
+	builderIDBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(builderIDBytes[24:], a.BuilderID)
+	maxFeeRateBytes := make([]byte, 32)
+	binary.BigEndian.PutUint64(maxFeeRateBytes[24:], a.MaxFeeRate)
+
+	return crypto.Keccak256Hash(
+		ApproveBuilderFeeActionTypeHash.Bytes(),
+		chainIDBytes,
+		nonceBytes,
+		accountIDBytes,
+		builderIDBytes,
+		maxFeeRateBytes,
+	)
+}
+
+func (a *ApproveBuilderFeeAction) Hash(domain *EIP712Domain) common.Hash {
+	return crypto.Keccak256Hash([]byte{0x19, 0x01}, domain.DomainSeparator().Bytes(), a.StructHash().Bytes())
+}
+
+// RecoverAddAPIKeySigner recovers an AddAPIKey signer from a raw signature.
+func RecoverAddAPIKeySigner(action *AddAPIKey, domain *EIP712Domain, signature []byte) (common.Address, error) {
+	if len(signature) != 65 {
+		return common.Address{}, ErrInvalidSignatureLength
+	}
+	publicKey, err := crypto.SigToPub(action.Hash(domain).Bytes(), signature)
+	if err != nil {
+		return common.Address{}, err
+	}
+	address := crypto.PubkeyToAddress(*publicKey)
 	if address == (common.Address{}) {
 		return common.Address{}, ErrInvalidPublicKey
 	}

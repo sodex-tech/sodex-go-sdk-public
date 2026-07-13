@@ -310,6 +310,78 @@ func TestDomainSeparator_ChainIDSensitivity(t *testing.T) {
 		"domains on different chains must have distinct separators")
 }
 
+// TestSignAddAPIKeyWithBuilderAction verifies the public SDK produces the Nova builder-specific universal signature.
+func TestSignAddAPIKeyWithBuilderAction(t *testing.T) {
+	key, wantAddr := mustLoadKey(t)
+	s := newSigner(types.SpotDomainName)
+	chainID := testChainID
+	nonce := uint64(1760373925001)
+	req := &types.AddAPIKeyWithBuilderRequest{
+		AccountID: 101,
+		Name:      "builder-key",
+		Type:      enums.APIKeyTypeEVM,
+		PublicKey: gethcrypto.PubkeyToAddress(key.PublicKey).Hex(),
+		Builder:   types.BuilderParams{BuilderID: 202, FeeRate: 10},
+	}
+
+	signature, err := s.SignAddAPIKeyWithBuilderAction(req, nonce, &chainID, key)
+	require.NoError(t, err)
+	action := &types.AddAPIKeyWithBuilderAction{
+		ChainID: chainID, Nonce: nonce, AddAPIKeyWithBuilderRequest: *req,
+	}
+	domain := types.NewEIP712Domain(types.UniversalDomainName, chainID)
+	publicKey, err := gethcrypto.SigToPub(action.Hash(&domain).Bytes(), signature[1:])
+	require.NoError(t, err)
+	assert.Equal(t, byte(enums.SignatureTypeEIP712Universal), signature[0])
+	assert.Equal(t, wantAddr[:], gethcrypto.PubkeyToAddress(*publicKey).Bytes())
+}
+
+// TestSignAddPermissionedAPIKeyAction verifies the public SDK permissioned-key universal signature.
+func TestSignAddPermissionedAPIKeyAction(t *testing.T) {
+	key, wantAddr := mustLoadKey(t)
+	s := newSigner(types.PerpsDomainName)
+	chainID := testChainID
+	nonce := uint64(1760373925002)
+	req := &types.AddPermissionedAPIKeyRequest{
+		AccountID: 101, Name: "permissioned-key", Type: enums.APIKeyTypeEVM,
+		PublicKey:   gethcrypto.PubkeyToAddress(key.PublicKey).Hex(),
+		Permissions: enums.APIKeyPermissionCancel.Mask(),
+	}
+
+	signature, err := s.SignAddPermissionedAPIKeyAction(req, nonce, &chainID, key)
+	require.NoError(t, err)
+	action := &types.UserSignedAddPermissionedAPIKeyAction{
+		UserSignedAction:             types.UserSignedAction{ChainID: chainID, Nonce: nonce},
+		AddPermissionedAPIKeyRequest: *req,
+	}
+	domain := types.NewEIP712Domain(types.UniversalDomainName, chainID)
+	publicKey, err := gethcrypto.SigToPub(action.Hash(&domain).Bytes(), signature[1:])
+	require.NoError(t, err)
+	assert.Equal(t, byte(enums.SignatureTypeEIP712Universal), signature[0])
+	assert.Equal(t, wantAddr[:], gethcrypto.PubkeyToAddress(*publicKey).Bytes())
+}
+
+// TestSignApproveBuilderFeeAction verifies the public SDK builder-fee universal signature.
+func TestSignApproveBuilderFeeAction(t *testing.T) {
+	key, wantAddr := mustLoadKey(t)
+	s := newSigner(types.SpotDomainName)
+	chainID := testChainID
+	nonce := uint64(1760373925003)
+	req := &types.ApproveBuilderFeeRequest{AccountID: 101, BuilderID: 202, MaxFeeRate: 10}
+
+	signature, err := s.SignApproveBuilderFeeAction(req, nonce, &chainID, key)
+	require.NoError(t, err)
+	action := &types.ApproveBuilderFeeAction{
+		ChainID: chainID, Nonce: nonce, AccountID: req.AccountID,
+		BuilderID: req.BuilderID, MaxFeeRate: req.MaxFeeRate,
+	}
+	domain := types.NewEIP712Domain(types.UniversalDomainName, chainID)
+	publicKey, err := gethcrypto.SigToPub(action.Hash(&domain).Bytes(), signature[1:])
+	require.NoError(t, err)
+	assert.Equal(t, byte(enums.SignatureTypeEIP712Universal), signature[0])
+	assert.Equal(t, wantAddr[:], gethcrypto.PubkeyToAddress(*publicKey).Bytes())
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // ptr returns a pointer to v. It exists only to make inline pointer literals
