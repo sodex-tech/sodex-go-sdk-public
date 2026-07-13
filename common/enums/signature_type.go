@@ -11,8 +11,9 @@ package enums
 type SignatureType int
 
 const (
-	SignatureTypeUnknown SignatureType = iota // Unrecognised or uninitialised type; always rejected by the server.
-	SignatureTypeEIP712                       // EIP-712 structured-data signature using the engine-specific domain.
+	SignatureTypeUnknown         SignatureType = iota // Unrecognised or uninitialised type; always rejected by the server.
+	SignatureTypeEIP712                               // EIP-712 structured-data signature using the engine-specific domain.
+	SignatureTypeEIP712Universal                      // EIP-712 structured-data signature using the universal domain.
 )
 
 // String returns the canonical string representation of SignatureType as
@@ -21,6 +22,8 @@ func (t SignatureType) String() string {
 	switch t {
 	case SignatureTypeEIP712:
 		return "EIP712"
+	case SignatureTypeEIP712Universal:
+		return "EIP712_UNIVERSAL"
 	default:
 		return "UNKNOWN"
 	}
@@ -32,6 +35,8 @@ func ParseSignatureType(s string) SignatureType {
 	switch s {
 	case "EIP712":
 		return SignatureTypeEIP712
+	case "EIP712_UNIVERSAL":
+		return SignatureTypeEIP712Universal
 	default:
 		return SignatureTypeUnknown
 	}

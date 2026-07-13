@@ -3,6 +3,7 @@ package types
 import (
 	"github.com/shopspring/decimal"
 	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
+	ctypes "github.com/sodex-tech/sodex-go-sdk-public/common/types"
 )
 
 const NewOrderRequestTypeName = "newOrder"
@@ -47,9 +48,10 @@ type RawOrder struct {
 }
 
 type NewOrderRequest struct {
-	AccountID uint64      `json:"accountID"`
-	SymbolID  uint64      `json:"symbolID"`
-	Orders    []*RawOrder `json:"orders"`
+	AccountID uint64                `json:"accountID"`
+	SymbolID  uint64                `json:"symbolID"`
+	Orders    []*RawOrder           `json:"orders"`
+	Builder   *ctypes.BuilderParams `json:"builder,omitempty"`
 }
 
 func (req *NewOrderRequest) ActionName() string {
