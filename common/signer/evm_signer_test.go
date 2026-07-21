@@ -24,6 +24,8 @@ import (
 	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 	"github.com/sodex-tech/sodex-go-sdk-public/common/signer"
 	"github.com/sodex-tech/sodex-go-sdk-public/common/types"
+	perpssigner "github.com/sodex-tech/sodex-go-sdk-public/perps/signer"
+	spotsigner "github.com/sodex-tech/sodex-go-sdk-public/spot/signer"
 )
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
@@ -146,6 +148,33 @@ func TestCrossEngineIsolation(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, wantAddr[:], recovered,
 		"spot signature must not recover the correct address under the perps domain")
+}
+
+// TestSignRevokeAPIKeyRequestUsesEngineDomains validates the public Spot and Perps
+// helpers sign the revoke action with their respective engine-specific domains.
+func TestSignRevokeAPIKeyRequestUsesEngineDomains(t *testing.T) {
+	key, wantAddr := mustLoadKey(t)
+	spot := spotsigner.NewSigner(testChainID, key)
+	perps := perpssigner.NewSigner(testChainID, key)
+	req := &types.RevokeAPIKeyRequest{AccountID: 1001, Name: "trading-key"}
+	const nonce = uint64(9)
+
+	spotSignature, err := spot.SignRevokeAPIKeyRequest(req, nonce)
+	require.NoError(t, err)
+	perpsSignature, err := perps.SignRevokeAPIKeyRequest(req, nonce)
+	require.NoError(t, err)
+
+	assert.Equal(t, types.RevokeAPIKeyRequestTypeName, req.ActionName())
+	assert.NotEqual(t, spotSignature, perpsSignature,
+		"spot and perps revoke signatures must use different EIP-712 domains")
+
+	spotAddress, err := newSigner(types.SpotDomainName).RecoverPublicKeyFromRequest(req, nonce, spotSignature)
+	require.NoError(t, err)
+	assert.Equal(t, wantAddr[:], spotAddress)
+
+	perpsAddress, err := newSigner(types.PerpsDomainName).RecoverPublicKeyFromRequest(req, nonce, perpsSignature)
+	require.NoError(t, err)
+	assert.Equal(t, wantAddr[:], perpsAddress)
 }
 
 // ── 4. Determinism ────────────────────────────────────────────────────────────

@@ -272,9 +272,12 @@ sig, err := s.SignNewOrderRequest(req, nonce)
 
 | Method                      | Request type            |
 |-----------------------------|-------------------------|
+| `SignRevokeAPIKeyRequest`   | `RevokeAPIKeyRequest`   |
 | `SignTransferAssetRequest`  | `TransferAssetRequest`  |
 | `SignReplaceOrderRequest`   | `ReplaceOrderRequest`   |
 | `SignScheduleCancelRequest` | `ScheduleCancelRequest` |
+
+To revoke a key from both engines, sign and submit the request separately with the Spot and Perps signers.
 
 **Spot (Spark)**
 
