@@ -71,6 +71,11 @@ func (s *Signer) SignApproveBuilderFeeRequest(request *ctypes.ApproveBuilderFeeR
 	return s.signer.SignApproveBuilderFeeAction(request, nonce, signatureChainID, s.privateKey)
 }
 
+// SignRevokeAPIKeyRequest signs an API key revocation for the spot engine.
+func (s *Signer) SignRevokeAPIKeyRequest(request *ctypes.RevokeAPIKeyRequest, nonce uint64) ([]byte, error) {
+	return s.signer.SignAction(request, nonce, s.privateKey)
+}
+
 // SignTransferAssetRequest signs an inter-account asset transfer request.
 // The nonce must be the caller's next valid nonce for the spot engine.
 func (s *Signer) SignTransferAssetRequest(request *ctypes.TransferAssetRequest, nonce uint64) ([]byte, error) {
