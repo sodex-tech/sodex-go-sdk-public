@@ -123,6 +123,7 @@ More complete examples live in [`examples/`](./examples):
 |---|---|
 | [`examples/rest/trade`](./examples/rest/trade) | Place + cancel a perps limit order |
 | [`examples/rest/account`](./examples/rest/account) | Query balances, orders, positions |
+| [`examples/rest/approve-builder-fee`](./examples/rest/approve-builder-fee) | Approve a builder fee for Spot and Perps |
 | [`examples/ws/subscribe`](./examples/ws/subscribe) | Subscribe to trades + order book |
 | [`examples/signer`](./examples/signer) | Low-level EIP-712 signing only |
 
