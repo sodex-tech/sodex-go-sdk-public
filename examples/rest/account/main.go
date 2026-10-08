@@ -54,7 +54,7 @@ func main() {
 	}
 	fmt.Printf("Balances (%d):\n", len(balances))
 	for _, b := range balances {
-		fmt.Printf("  %-8s total=%-20s locked=%s\n", b.Coin, b.Total, b.Locked)
+		fmt.Printf("  %-8s total=%-20s collateral=%-20s marginRatio=%s\n", b.Coin, b.Total, b.Collateral, b.MarginRatio)
 	}
 
 	positions, err := c.PerpsPositions(ctx, address)
