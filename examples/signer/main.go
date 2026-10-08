@@ -56,7 +56,7 @@ func main() {
 				TimeInForce:  enums.TimeInForceGTC,
 				Price:        &price,
 				Quantity:     &qty,
-				PositionSide: enums.PositionSideLong,
+				PositionSide: enums.PositionSideBoth,
 			},
 		},
 	}

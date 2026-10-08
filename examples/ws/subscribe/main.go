@@ -5,7 +5,7 @@
 //
 //	go run ./examples/ws/subscribe
 //
-// Subscribes to trades and the L2 order book for BTC-USD on the perps engine.
+// Subscribes to trades and the ten-level order book for BTC-USD on the perps engine.
 // Runs until the context is cancelled (Ctrl-C).
 package main
 
@@ -34,17 +34,17 @@ func main() {
 	// Subscribe BEFORE Connect — the SDK queues subscriptions and sends them
 	// as soon as the socket is open, then automatically re-subscribes on reconnect.
 	if _, err := w.Subscribe(
-		ws.SubscribeParams{Channel: ws.ChannelTrade, Symbol: "BTC-USD"},
+		ws.SubscribeParams{Channel: ws.ChannelTrade, Symbols: []string{"BTC-USD"}},
 		handleTrade,
 	); err != nil {
 		log.Fatalf("Subscribe trade: %v", err)
 	}
 
 	if _, err := w.Subscribe(
-		ws.SubscribeParams{Channel: ws.ChannelL2Book, Symbol: "BTC-USD", Level: 5},
-		handleL2Book,
+		ws.SubscribeParams{Channel: ws.ChannelL4Book, Symbol: "BTC-USD", Level: 10},
+		handleOrderBook,
 	); err != nil {
-		log.Fatalf("Subscribe l2Book: %v", err)
+		log.Fatalf("Subscribe l4Book: %v", err)
 	}
 
 	log.Println("connecting… (Ctrl-C to quit)")
@@ -54,18 +54,20 @@ func main() {
 }
 
 func handleTrade(push ws.Push) {
-	var t ws.Trade
-	if err := json.Unmarshal(push.Data, &t); err != nil {
+	var trades []ws.Trade
+	if err := json.Unmarshal(push.Data, &trades); err != nil {
 		log.Printf("decode trade: %v", err)
 		return
 	}
-	fmt.Printf("[trade]   %s %s @ %s qty=%s\n", t.Symbol, t.Side, t.Price, t.Quantity)
+	for _, t := range trades {
+		fmt.Printf("[trade]   %s %s @ %s qty=%s\n", t.Symbol, t.Side, t.Price, t.Quantity)
+	}
 }
 
-func handleL2Book(push ws.Push) {
+func handleOrderBook(push ws.Push) {
 	var book ws.L2Book
 	if err := json.Unmarshal(push.Data, &book); err != nil {
-		log.Printf("decode l2Book: %v", err)
+		log.Printf("decode l4Book: %v", err)
 		return
 	}
 	bestBid, bestAsk := "-", "-"

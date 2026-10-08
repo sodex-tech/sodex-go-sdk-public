@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -161,12 +163,17 @@ func (c *Client) resubscribe() {
 // Subscribe registers a handler for a channel and sends the subscribe message.
 // Returns a subscription ID that can be used to Unsubscribe.
 func (c *Client) Subscribe(params SubscribeParams, handler Handler) (int64, error) {
-	id := c.nextID.Add(1)
-	sub := &subscription{id: id, params: params, handler: handler}
-
-	identifier := channelIdentifier(params)
+	identifier := params.Channel
 
 	c.mu.Lock()
+	// Account pushes do not consistently carry a user or account ID, so they
+	// cannot be routed between two subscriptions on the same connection.
+	if isAccountChannel(params.Channel) && len(c.handlers[identifier]) > 0 {
+		c.mu.Unlock()
+		return 0, fmt.Errorf("ws: %s supports one subscription per client; use a separate client for another account", params.Channel)
+	}
+	id := c.nextID.Add(1)
+	sub := &subscription{id: id, params: params, handler: handler}
 	c.subs[id] = sub
 	c.handlers[identifier] = append(c.handlers[identifier], id)
 	c.mu.Unlock()
@@ -187,7 +194,7 @@ func (c *Client) Unsubscribe(id int64) error {
 	}
 	delete(c.subs, id)
 
-	identifier := channelIdentifier(sub.params)
+	identifier := sub.params.Channel
 	ids := c.handlers[identifier]
 	for i, sid := range ids {
 		if sid == id {
@@ -195,17 +202,12 @@ func (c *Client) Unsubscribe(id int64) error {
 			break
 		}
 	}
-	// If no more handlers for this identifier, send unsubscribe to server.
-	shouldUnsub := len(c.handlers[identifier]) == 0
-	if shouldUnsub {
+	if len(c.handlers[identifier]) == 0 {
 		delete(c.handlers, identifier)
 	}
 	c.mu.Unlock()
 
-	if shouldUnsub {
-		return c.sendSubscribe("unsubscribe", id, sub.params)
-	}
-	return nil
+	return c.sendSubscribe("unsubscribe", id, sub.params)
 }
 
 // Close terminates the WebSocket connection and stops reconnection.
@@ -270,6 +272,12 @@ func (c *Client) readLoop(ctx context.Context) {
 			case <-stopPing:
 				return
 			case <-ctx.Done():
+				c.mu.Lock()
+				conn := c.conn
+				c.mu.Unlock()
+				if conn != nil {
+					conn.Close()
+				}
 				return
 			case <-c.done:
 				return
@@ -288,7 +296,9 @@ func (c *Client) readLoop(ctx context.Context) {
 		_ = conn.SetReadDeadline(time.Now().Add(pongWait + pingInterval))
 		_, raw, err := conn.ReadMessage()
 		if err != nil {
-			c.emitError(fmt.Errorf("ws: read: %w", err))
+			if ctx.Err() == nil && !c.isClosed() {
+				c.emitError(fmt.Errorf("ws: read: %w", err))
+			}
 			return
 		}
 
@@ -332,8 +342,69 @@ func (c *Client) dispatch(raw []byte) {
 		sub, ok := c.subs[id]
 		c.mu.Unlock()
 		if ok {
-			sub.handler(push)
+			if matched, ok := pushForSubscription(push, sub.params); ok {
+				sub.handler(matched)
+			}
 		}
+	}
+}
+
+func (c *Client) isClosed() bool {
+	select {
+	case <-c.done:
+		return true
+	default:
+		return false
+	}
+}
+
+func pushForSubscription(push Push, params SubscribeParams) (Push, bool) {
+	switch push.Channel {
+	case ChannelTrade, ChannelTicker, ChannelMiniTicker, ChannelBookTicker, ChannelMarkPrice:
+		if len(params.Symbols) == 0 {
+			return push, true
+		}
+		var items []json.RawMessage
+		if err := json.Unmarshal(push.Data, &items); err != nil {
+			return push, true
+		}
+		matched := make([]json.RawMessage, 0, len(items))
+		for _, item := range items {
+			var data struct {
+				Symbol string `json:"s"`
+			}
+			if json.Unmarshal(item, &data) == nil && slices.Contains(params.Symbols, data.Symbol) {
+				matched = append(matched, item)
+			}
+		}
+		if len(matched) == 0 {
+			return Push{}, false
+		}
+		push.Data, _ = json.Marshal(matched)
+	case ChannelCandle, ChannelL2Book, ChannelL4Book:
+		var data struct {
+			Symbol   string `json:"s"`
+			Interval string `json:"i"`
+		}
+		if err := json.Unmarshal(push.Data, &data); err != nil {
+			return push, true
+		}
+		if params.Symbol != "" && data.Symbol != params.Symbol {
+			return Push{}, false
+		}
+		if push.Channel == ChannelCandle && params.Interval != "" && !strings.EqualFold(data.Interval, params.Interval) {
+			return Push{}, false
+		}
+	}
+	return push, true
+}
+
+func isAccountChannel(channel string) bool {
+	switch channel {
+	case ChannelAccountState, ChannelAccountUpdate, ChannelAccountOrderUpd, ChannelAccountTrade, ChannelAccountEvent:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -346,8 +417,4 @@ func (c *Client) emitError(err error) {
 	} else {
 		log.Println(err)
 	}
-}
-
-func channelIdentifier(p SubscribeParams) string {
-	return p.Channel
 }
