@@ -8,7 +8,7 @@ Official Go SDK for the Sodex exchange. Provides:
 
 ## Requirements
 
-- Go 1.24+
+- Go 1.25+
 
 ## Installation
 
@@ -75,7 +75,7 @@ func main() {
         /* symbolID  */ 1,
         /* clOrdID   */ "my-order-001",
         enums.OrderSideBuy,
-        enums.PositionSideLong,
+        enums.PositionSideBoth,
         enums.TimeInForceGTC,
         decimal.NewFromFloat(50000.0),
         decimal.NewFromFloat(0.01),
@@ -93,27 +93,36 @@ func main() {
 ```go
 import (
     "context"
+    "errors"
     "log"
+    "os/signal"
+    "syscall"
 
+    "github.com/sodex-tech/sodex-go-sdk-public/client"
     "github.com/sodex-tech/sodex-go-sdk-public/ws"
 )
 
 func main() {
+    ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+    defer stop()
+
     w, err := ws.NewClient(client.TestnetBaseURL, "perps")
     if err != nil {
         log.Fatal(err)
     }
 
     _, err = w.Subscribe(
-        ws.SubscribeParams{Channel: ws.ChannelTrade, Symbol: "BTC-USD"},
+        ws.SubscribeParams{Channel: ws.ChannelTrade, Symbols: []string{"BTC-USD"}},
         func(push ws.Push) { log.Printf("%s %s", push.Channel, string(push.Data)) },
     )
     if err != nil {
         log.Fatal(err)
     }
 
-    // Connect blocks until the context is cancelled.
-    log.Fatal(w.Connect(context.Background()))
+    // Connect blocks until Ctrl-C or another signal cancels the context.
+    if err := w.Connect(ctx); err != nil && !errors.Is(err, context.Canceled) {
+        log.Fatal(err)
+    }
 }
 ```
 
@@ -261,7 +270,7 @@ req := &ptypes.NewOrderRequest{
         TimeInForce:  enums.TimeInForceGTC,
         Price:        &price,
         Quantity:     &qty,
-        PositionSide: enums.PositionSideLong,
+        PositionSide: enums.PositionSideBoth,
     }},
 }
 

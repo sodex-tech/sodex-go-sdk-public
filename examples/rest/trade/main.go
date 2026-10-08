@@ -75,7 +75,7 @@ func main() {
 		btc.SymbolID,
 		clOrdID,
 		enums.OrderSideBuy,
-		enums.PositionSideLong,
+		enums.PositionSideBoth,
 		enums.TimeInForceGTC,
 		decimal.NewFromInt(1000), // intentionally far below market
 		decimal.NewFromFloat(0.001),
