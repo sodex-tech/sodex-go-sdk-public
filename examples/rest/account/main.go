@@ -74,7 +74,7 @@ func main() {
 	fmt.Printf("\nOpen orders (%d):\n", len(orders))
 	for _, o := range orders {
 		fmt.Printf("  [%d] %-12s %-4s %-6s qty=%-10s price=%-10s status=%s\n",
-			o.OrderID, o.Symbol, o.Side, o.Type, o.OrigQty, o.Price, o.Status)
+			o.OrderID, o.Symbol, o.Side, o.Type, orderField(o.OrigQty), orderField(o.Price), o.Status)
 	}
 
 	// ── Spot ─────────────────────────────────────────────────────────────────
@@ -94,4 +94,11 @@ func main() {
 	for _, b := range spotBalances {
 		fmt.Printf("  %-8s total=%-20s locked=%s\n", b.Coin, b.Total, b.Locked)
 	}
+}
+
+func orderField(value *string) string {
+	if value == nil {
+		return "-"
+	}
+	return *value
 }
