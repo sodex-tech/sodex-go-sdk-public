@@ -367,17 +367,24 @@ func printOrders(orders []client.Order, f outputFormat) error {
 		for _, o := range orders {
 			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				o.OrderID, o.ClOrdID, o.Symbol, o.Side, o.Type,
-				o.Price, o.OrigQty, o.ExecutedQty, o.Status)
+				orderField(o.Price), orderField(o.OrigQty), o.ExecutedQty, o.Status)
 		}
 		return w.Flush()
 	default:
 		for _, o := range orders {
 			fmt.Printf("%-12d  cl=%s  %s  %s/%s  price=%-14s  qty=%-12s  filled=%-12s  status=%s\n",
 				o.OrderID, o.ClOrdID, o.Symbol, o.Side, o.Type,
-				o.Price, o.OrigQty, o.ExecutedQty, o.Status)
+				orderField(o.Price), orderField(o.OrigQty), o.ExecutedQty, o.Status)
 		}
 		return nil
 	}
+}
+
+func orderField(value *string) string {
+	if value == nil {
+		return "-"
+	}
+	return *value
 }
 
 func printPositions(positions []client.Position, f outputFormat) error {

@@ -178,3 +178,43 @@ func TestAccountChannelRequiresSeparateClients(t *testing.T) {
 		t.Fatal("expected second account subscription to be rejected")
 	}
 }
+
+// TestBookUpdateSequenceFields checks snapshot and update payloads preserve the gateway's distinct update IDs.
+func TestBookUpdateSequenceFields(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload string
+		firstID *uint64
+		lastID  int64
+	}{
+		{name: "snapshot", payload: `{"channel":"l4Book","type":"snapshot","data":{"s":"BTC-USD","u":7,"a":[],"b":[]}}`, lastID: 7},
+		{name: "update", payload: `{"channel":"l4Book","type":"update","data":{"s":"BTC-USD","U":8,"u":10,"a":[["100","1"]],"b":[]}}`, firstID: uint64Ptr(8), lastID: 10},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var push Push
+			if err := json.Unmarshal([]byte(tc.payload), &push); err != nil {
+				t.Fatal(err)
+			}
+			var book L2Book
+			if err := json.Unmarshal(push.Data, &book); err != nil {
+				t.Fatal(err)
+			}
+			if book.UpdateID != tc.lastID || (book.FirstUpdateID == nil) != (tc.firstID == nil) || (tc.firstID != nil && *book.FirstUpdateID != *tc.firstID) {
+				t.Fatalf("book = %+v, want first ID %v and last ID %d", book, tc.firstID, tc.lastID)
+			}
+		})
+	}
+}
+
+// TestAccountTradeBuilderFee checks that account trade pushes retain the optional builder fee.
+func TestAccountTradeBuilderFee(t *testing.T) {
+	var trade AccountTrade
+	if err := json.Unmarshal([]byte(`{"s":"BTC-USD","f":"0.02","bf":"0.01"}`), &trade); err != nil {
+		t.Fatal(err)
+	}
+	if trade.BuilderFee == nil || *trade.BuilderFee != "0.01" {
+		t.Fatalf("account trade: %+v", trade)
+	}
+}
+
+func uint64Ptr(value uint64) *uint64 { return &value }

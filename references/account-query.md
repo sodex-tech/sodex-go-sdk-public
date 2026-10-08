@@ -52,6 +52,8 @@ Prefix with `/api/v1/spot` or `/api/v1/perps`. Optional query param `accountID` 
 | `GET /accounts/{address}/api-keys` | API key list |
 | `GET /accounts/{address}/funding-history` | Funding payments (perps only) |
 
+In the Go SDK, `client.Order.Price`, `OrigQty`, and `Funds` are `*string` because the API omits amounts that do not apply to an order. Check for `nil` before using them.
+
 ## Rate Limits
 
 | Endpoint | Weight |

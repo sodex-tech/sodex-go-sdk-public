@@ -19,32 +19,61 @@ type APIResponse[T any] struct {
 
 // Symbol describes a tradeable market (shared by spot and perps).
 type Symbol struct {
-	SymbolID          uint64 `json:"id"`
-	Symbol            string `json:"name"`
-	DisplayName       string `json:"displayName"`
-	BaseAsset         string `json:"baseCoin"`
-	QuoteAsset        string `json:"quoteCoin"`
-	Status            string `json:"status"`
-	PricePrecision    int    `json:"pricePrecision"`
-	QuantityPrecision int    `json:"quantityPrecision"`
-	MinQuantity       string `json:"minQuantity"`
-	MaxQuantity       string `json:"maxQuantity"`
-	MinPrice          string `json:"minPrice"`
-	MaxPrice          string `json:"maxPrice"`
-	TickSize          string `json:"tickSize"`
-	StepSize          string `json:"stepSize"`
-	MinNotional       string `json:"minNotional"`
-	MakerFee          string `json:"makerFee,omitempty"`
-	TakerFee          string `json:"takerFee,omitempty"`
+	SymbolID             uint64  `json:"id"`
+	Symbol               string  `json:"name"`
+	DisplayName          string  `json:"displayName"`
+	BaseAsset            string  `json:"baseCoin"`
+	QuoteAsset           string  `json:"quoteCoin"`
+	Status               string  `json:"status"`
+	PricePrecision       int     `json:"pricePrecision"`
+	QuantityPrecision    int     `json:"quantityPrecision"`
+	MinQuantity          string  `json:"minQuantity"`
+	MaxQuantity          string  `json:"maxQuantity"`
+	MinPrice             string  `json:"minPrice"`
+	MaxPrice             string  `json:"maxPrice"`
+	TickSize             string  `json:"tickSize"`
+	StepSize             string  `json:"stepSize"`
+	MarketMinQuantity    string  `json:"marketMinQuantity"`
+	MarketMaxQuantity    string  `json:"marketMaxQuantity"`
+	MinNotional          string  `json:"minNotional"`
+	MaxNotional          string  `json:"maxNotional"`
+	BuyLimitUpRatio      string  `json:"buyLimitUpRatio"`
+	SellLimitDownRatio   string  `json:"sellLimitDownRatio"`
+	MarketDeviationRatio string  `json:"marketDeviationRatio"`
+	MakerFee             string  `json:"makerFee,omitempty"`
+	TakerFee             string  `json:"takerFee,omitempty"`
+	FeeDiscount          *string `json:"feeDiscount,omitempty"`
+	QuoteCoinID          uint64  `json:"quoteCoinID"`
+	QuoteCoinPrecision   uint8   `json:"quoteCoinPrecision"`
+	// Spot-only:
+	BaseCoinID        *uint64 `json:"baseCoinID,omitempty"`
+	BaseCoinPrecision *uint8  `json:"baseCoinPrecision,omitempty"`
 	// Perps-only:
-	MaxLeverage  *int    `json:"maxLeverage,omitempty"`
-	ContractSize *string `json:"contractSize,omitempty"`
+	OpenInterestCap    *string           `json:"openInterestCap,omitempty"`
+	OpenInterestCapUSD *string           `json:"openInterestCapUSD,omitempty"`
+	MaxLeverage        *int              `json:"maxLeverage,omitempty"`
+	InitLeverage       *uint32           `json:"initLeverage,omitempty"`
+	MarginTiers        []PerpsMarginTier `json:"marginTiers,omitempty"`
+	FundingInterval    *uint32           `json:"fundingInterval,omitempty"`
+	InterestRate       *string           `json:"interestRate,omitempty"`
+	MaxFundingRate     *string           `json:"maxFundingRate,omitempty"`
+	MinFundingRate     *string           `json:"minFundingRate,omitempty"`
+	FundingDiscount    *string           `json:"fundingDiscount,omitempty"`
+}
+
+// PerpsMarginTier describes one perpetuals maintenance margin tier.
+type PerpsMarginTier struct {
+	MaxNotionalValue      string `json:"maxNotionalValue"`
+	MaintenanceMarginRate string `json:"maintenanceMarginRate"`
+	MaxLeverage           uint32 `json:"maxLeverage"`
+	MaintenanceDeduction  string `json:"maintenanceDeduction"`
 }
 
 // Ticker holds 24-hour rolling statistics for a symbol.
 type Ticker struct {
 	Symbol             string  `json:"symbol"`
 	LastPrice          string  `json:"lastPx"`
+	LastSize           *string `json:"lastSz,omitempty"`
 	OpenPrice          string  `json:"openPx"`
 	HighPrice          string  `json:"highPx"`
 	LowPrice           string  `json:"lowPx"`
@@ -54,13 +83,17 @@ type Ticker struct {
 	AskSize            string  `json:"askSz"`
 	Volume             string  `json:"volume"`
 	QuoteVolume        string  `json:"quoteVolume"`
+	VWAP               *string `json:"vwap,omitempty"`
 	PriceChange        string  `json:"change"`
 	PriceChangePercent float64 `json:"changePct"`
+	OpenTime           uint64  `json:"openTime"`
+	CloseTime          uint64  `json:"closeTime"`
 	// Perps-only:
-	MarkPrice    *string `json:"markPrice,omitempty"`
-	IndexPrice   *string `json:"indexPrice,omitempty"`
-	FundingRate  *string `json:"fundingRate,omitempty"`
-	OpenInterest *string `json:"openInterest,omitempty"`
+	MarkPrice       *string `json:"markPrice,omitempty"`
+	IndexPrice      *string `json:"indexPrice,omitempty"`
+	FundingRate     *string `json:"fundingRate,omitempty"`
+	NextFundingTime *uint64 `json:"nextFundingTime,omitempty"`
+	OpenInterest    *string `json:"openInterest,omitempty"`
 }
 
 // OrderBookLevel is a single price level in an order book snapshot.
@@ -132,20 +165,37 @@ type PerpsBalance struct {
 
 // Order represents a resting or historical order record.
 type Order struct {
-	OrderID       uint64 `json:"orderID"`
-	ClOrdID       string `json:"clOrdID"`
-	Symbol        string `json:"symbol"`
-	Side          string `json:"side"`
-	Type          string `json:"type"`
-	TimeInForce   string `json:"timeInForce"`
-	Price         string `json:"price"`
-	OrigQty       string `json:"origQty"`
-	ExecutedQty   string `json:"executedQty"`
-	ExecutedValue string `json:"executedValue"`
-	Status        string `json:"status"`
-	MarginFrozen  string `json:"marginFrozen,omitempty"`
-	CreatedAt     int64  `json:"createdAt"`
-	UpdatedAt     int64  `json:"updatedAt"`
+	OrderID       uint64        `json:"orderID"`
+	ClOrdID       string        `json:"clOrdID"`
+	Symbol        string        `json:"symbol"`
+	Side          string        `json:"side"`
+	Type          string        `json:"type"`
+	TimeInForce   string        `json:"timeInForce"`
+	Price         *string       `json:"price,omitempty"`
+	OrigQty       *string       `json:"origQty,omitempty"`
+	Funds         *string       `json:"funds,omitempty"`
+	ExecutedQty   string        `json:"executedQty"`
+	ExecutedValue string        `json:"executedValue"`
+	Status        string        `json:"status"`
+	MarginFrozen  string        `json:"marginFrozen,omitempty"`
+	Builder       *OrderBuilder `json:"builder,omitempty"`
+	// Perps-only:
+	PositionSide     string   `json:"positionSide,omitempty"`
+	ReduceOnly       *bool    `json:"reduceOnly,omitempty"`
+	StopPrice        *string  `json:"stopPrice,omitempty"`
+	StopType         *string  `json:"stopType,omitempty"`
+	TriggerType      *string  `json:"triggerType,omitempty"`
+	PositionID       *uint64  `json:"positionID,omitempty"`
+	PrimaryOrderID   *uint64  `json:"primaryOrderID,omitempty"`
+	AttachedOrderIDs []uint64 `json:"attachedOrderIDs,omitempty"`
+	CreatedAt        int64    `json:"createdAt"`
+	UpdatedAt        int64    `json:"updatedAt"`
+}
+
+// OrderBuilder is the optional builder fee attached to an order.
+type OrderBuilder struct {
+	BuilderID uint64 `json:"builderID"`
+	FeeRate   uint64 `json:"feeRate"`
 }
 
 // Position represents an open perpetuals position.
@@ -228,17 +278,18 @@ type PublicTrade struct {
 // UserTrade is a single filled-order record for an account (private per-user trade history).
 // Distinct from PublicTrade which is market-wide.
 type UserTrade struct {
-	Symbol    string `json:"symbol"`
-	TradeID   uint64 `json:"tradeID"`
-	OrderID   uint64 `json:"orderID"`
-	ClOrdID   string `json:"clOrdID"`
-	Side      string `json:"side"`
-	Price     string `json:"price"`
-	Quantity  string `json:"quantity"`
-	Fee       string `json:"fee"`
-	FeeCoin   string `json:"feeCoin"`
-	Timestamp uint64 `json:"time"` // Trade time in unix milliseconds
-	IsMaker   bool   `json:"isMaker"`
+	Symbol     string  `json:"symbol"`
+	TradeID    uint64  `json:"tradeID"`
+	OrderID    uint64  `json:"orderID"`
+	ClOrdID    string  `json:"clOrdID"`
+	Side       string  `json:"side"`
+	Price      string  `json:"price"`
+	Quantity   string  `json:"quantity"`
+	Fee        string  `json:"fee"`
+	BuilderFee *string `json:"builderFee,omitempty"`
+	FeeCoin    string  `json:"feeCoin"`
+	Timestamp  uint64  `json:"time"` // Trade time in unix milliseconds
+	IsMaker    bool    `json:"isMaker"`
 }
 
 // FundingPayment is a single funding payment debit/credit on a perps position.

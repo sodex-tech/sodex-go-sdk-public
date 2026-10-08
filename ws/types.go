@@ -103,13 +103,14 @@ type Trade struct {
 	SellerID  int64  `json:"si"`
 }
 
-// L2Book is an L2/L4 order book snapshot.
+// L2Book is an L2/L4 order book snapshot or update.
 type L2Book struct {
-	EventTime int64      `json:"E"`
-	Symbol    string     `json:"s"`
-	UpdateID  int64      `json:"u"`
-	Asks      [][]string `json:"a"` // [[price, qty], ...]
-	Bids      [][]string `json:"b"` // [[price, qty], ...]
+	EventTime     int64      `json:"E"`
+	Symbol        string     `json:"s"`
+	FirstUpdateID *uint64    `json:"U,omitempty"` // Present on updates; absent on snapshots.
+	UpdateID      int64      `json:"u"`
+	Asks          [][]string `json:"a"` // [[price, qty], ...]
+	Bids          [][]string `json:"b"` // [[price, qty], ...]
 }
 
 // Candle is an OHLCV candlestick update.
@@ -166,18 +167,19 @@ type AccountOrderUpdate struct {
 
 // AccountTrade is a user trade/fill event.
 type AccountTrade struct {
-	EventTime int64  `json:"E"`
-	TradeTime int64  `json:"T"`
-	TradeID   int64  `json:"t"`
-	Symbol    string `json:"s"`
-	OrderID   int64  `json:"i"`
-	ClOrdID   string `json:"c"`
-	Side      string `json:"S"`
-	Price     string `json:"p"`
-	Quantity  string `json:"q"`
-	Fee       string `json:"f"`
-	IsMaker   bool   `json:"m"`
-	Direction string `json:"d,omitempty"` // perps only: LONG/SHORT
+	EventTime  int64   `json:"E"`
+	TradeTime  int64   `json:"T"`
+	TradeID    int64   `json:"t"`
+	Symbol     string  `json:"s"`
+	OrderID    int64   `json:"i"`
+	ClOrdID    string  `json:"c"`
+	Side       string  `json:"S"`
+	Price      string  `json:"p"`
+	Quantity   string  `json:"q"`
+	Fee        string  `json:"f"`
+	BuilderFee *string `json:"bf,omitempty"`
+	IsMaker    bool    `json:"m"`
+	Direction  string  `json:"d,omitempty"` // perps only: LONG/SHORT
 }
 
 // Channel name constants.

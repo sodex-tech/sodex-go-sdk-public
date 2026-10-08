@@ -160,3 +160,85 @@ func TestAPIResponse(t *testing.T) {
 		t.Fatalf("unexpected envelope: %+v", response)
 	}
 }
+
+// TestMarketResponseFields checks spot/perps rule and ticker fields that the gateway includes in public market responses.
+func TestMarketResponseFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/spot/markets/symbols":
+			_, _ = w.Write([]byte(`{"code":0,"data":[{"id":1,"name":"vBTC_vUSDC","baseCoinID":0,"baseCoinPrecision":8,"quoteCoinID":2,"quoteCoinPrecision":6,"marketMinQuantity":"0.01","marketMaxQuantity":"100","maxNotional":"100000","buyLimitUpRatio":"0.1"}]}`))
+		case "/api/v1/perps/markets/symbols":
+			_, _ = w.Write([]byte(`{"code":0,"data":[{"id":3,"name":"BTC-USD","quoteCoinID":2,"quoteCoinPrecision":6,"marketMinQuantity":"0.001","marketMaxQuantity":"1000","maxNotional":"125000","openInterestCap":"1000000","maxLeverage":10,"initLeverage":5,"marginTiers":[{"maxNotionalValue":"125000","maintenanceMarginRate":"0.05","maxLeverage":10,"maintenanceDeduction":"0"}],"fundingInterval":3600,"interestRate":"0.0001"}]}`))
+		case "/api/v1/perps/markets/tickers":
+			_, _ = w.Write([]byte(`{"code":0,"data":[{"symbol":"BTC-USD","lastPx":"100","lastSz":"0.5","vwap":"99.5","openTime":1000,"closeTime":2000,"nextFundingTime":3000,"markPrice":"100.1"}]}`))
+		default:
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(Config{BaseURL: srv.URL, HTTPClient: srv.Client()})
+	spot, err := c.SpotSymbols(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spot) != 1 || spot[0].BaseCoinID == nil || *spot[0].BaseCoinID != 0 || spot[0].MarketMinQuantity != "0.01" || spot[0].MaxNotional != "100000" || spot[0].BuyLimitUpRatio != "0.1" {
+		t.Fatalf("spot symbols: %+v", spot)
+	}
+	perps, err := c.PerpsSymbols(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(perps) != 1 || perps[0].MaxLeverage == nil || *perps[0].MaxLeverage != 10 || len(perps[0].MarginTiers) != 1 || perps[0].MarginTiers[0].MaintenanceMarginRate != "0.05" || perps[0].FundingInterval == nil || *perps[0].FundingInterval != 3600 || perps[0].OpenInterestCap == nil || *perps[0].OpenInterestCap != "1000000" {
+		t.Fatalf("perps symbols: %+v", perps)
+	}
+	tickers, err := c.PerpsTickers(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tickers) != 1 || tickers[0].LastSize == nil || *tickers[0].LastSize != "0.5" || tickers[0].VWAP == nil || *tickers[0].VWAP != "99.5" || tickers[0].OpenTime != 1000 || tickers[0].NextFundingTime == nil || *tickers[0].NextFundingTime != 3000 {
+		t.Fatalf("perps tickers: %+v", tickers)
+	}
+}
+
+// TestAccountResponseFields checks omitted spot order amounts and perps order controls survive response decoding.
+func TestAccountResponseFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v1/spot/accounts/0xabc/orders":
+			_, _ = w.Write([]byte(`{"code":0,"data":{"blockTime":100,"orders":[{"orderID":1,"type":"MARKET","funds":"100","builder":{"builderID":7,"feeRate":10}}]}}`))
+		case "/api/v1/perps/accounts/0xabc/orders":
+			_, _ = w.Write([]byte(`{"code":0,"data":{"blockTime":100,"orders":[{"orderID":2,"price":"100","origQty":"1","positionSide":"BOTH","reduceOnly":false,"stopPrice":"99","stopType":"STOP_LOSS","triggerType":"MARK_PRICE","positionID":3,"primaryOrderID":4,"attachedOrderIDs":[5,6]}]}}`))
+		case "/api/v1/spot/accounts/0xabc/trades":
+			_, _ = w.Write([]byte(`{"code":0,"data":[{"tradeID":9,"builderFee":"0.01"}]}`))
+		default:
+			t.Errorf("unexpected path: %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(Config{BaseURL: srv.URL, HTTPClient: srv.Client()})
+	spot, err := c.SpotOrders(context.Background(), "0xabc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spot) != 1 || spot[0].Price != nil || spot[0].OrigQty != nil || spot[0].Funds == nil || *spot[0].Funds != "100" || spot[0].Builder == nil || spot[0].Builder.BuilderID != 7 {
+		t.Fatalf("spot orders: %+v", spot)
+	}
+	perps, err := c.PerpsOrders(context.Background(), "0xabc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(perps) != 1 || perps[0].Price == nil || *perps[0].Price != "100" || perps[0].ReduceOnly == nil || *perps[0].ReduceOnly || perps[0].PositionSide != "BOTH" || perps[0].StopPrice == nil || *perps[0].StopPrice != "99" || perps[0].PositionID == nil || *perps[0].PositionID != 3 || len(perps[0].AttachedOrderIDs) != 2 {
+		t.Fatalf("perps orders: %+v", perps)
+	}
+	trades, err := c.SpotUserTrades(context.Background(), "0xabc", HistoryFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(trades) != 1 || trades[0].BuilderFee == nil || *trades[0].BuilderFee != "0.01" {
+		t.Fatalf("spot trades: %+v", trades)
+	}
+}
