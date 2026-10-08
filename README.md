@@ -169,6 +169,8 @@ Exported constants in `client/`:
 
 The client tracks a strictly-monotonic millisecond nonce internally, so callers never manage nonces when using the REST client.
 
+Batch place, cancel, and replace methods return one result per order. Check each result's `Code` (`0` means accepted); a batch can contain rejected items even when the outer API request succeeded. Rejected items provide `Error`, and `OrderID` is present only when returned by the engine. `PerpsBalances` returns `[]client.PerpsBalance` with collateral and margin fields. `UpdateLeverage` returns only an `error` because the endpoint has no success payload.
+
 ## Advanced: low-level signing
 
 Every authenticated action sent to the Sodex exchange must carry an EIP-712 signature. The `client` package handles this automatically, but the `spot/signer` and `perps/signer` packages expose the primitives directly for callers who build their own HTTP layer.

@@ -11,9 +11,10 @@ import (
 // APIResponse is the standard JSON envelope returned by all Sodex REST endpoints.
 // code == 0 means success; any non-zero value is an application-level error.
 type APIResponse[T any] struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Data    T      `json:"data"`
+	Code      int     `json:"code"`
+	Timestamp uint64  `json:"timestamp"`
+	Data      T       `json:"data"`
+	Error     *string `json:"error,omitempty"`
 }
 
 // Symbol describes a tradeable market (shared by spot and perps).
@@ -79,20 +80,19 @@ func (l *OrderBookLevel) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// MarshalJSON encodes an order book level back to a JSON object for display.
+// MarshalJSON preserves the API's [price, qty] array format.
 func (l OrderBookLevel) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Price    string `json:"price"`
-		Quantity string `json:"quantity"`
-	}{l.Price, l.Quantity})
+	return json.Marshal([2]string{l.Price, l.Quantity})
 }
 
 // OrderBook is a full depth snapshot for a symbol.
 type OrderBook struct {
-	Symbol   string           `json:"-"` // set by caller, not in API response
-	Bids     []OrderBookLevel `json:"bids"`
-	Asks     []OrderBookLevel `json:"asks"`
-	UpdateID uint64           `json:"updateID"`
+	Symbol      string           `json:"-"` // set by caller, not in API response
+	BlockTime   uint64           `json:"blockTime"`
+	BlockHeight uint64           `json:"blockHeight"`
+	Bids        []OrderBookLevel `json:"bids"`
+	Asks        []OrderBookLevel `json:"asks"`
+	UpdateID    uint64           `json:"updateID"`
 }
 
 // blockTimeWrapper is used to unwrap nested API responses that include
@@ -112,12 +112,22 @@ type AccountInfo struct {
 	UserID    uint64 `json:"uid"`
 }
 
-// Balance represents a single asset balance in an account.
+// Balance represents a single spot asset balance in an account.
 type Balance struct {
 	CoinID uint64 `json:"id"`
 	Coin   string `json:"coin"`
 	Total  string `json:"total"`
 	Locked string `json:"locked"`
+}
+
+// PerpsBalance represents a single perpetuals asset balance in an account.
+type PerpsBalance struct {
+	CoinID      uint64  `json:"id"`
+	Coin        string  `json:"coin"`
+	Total       string  `json:"total"`
+	Collateral  string  `json:"collateral"`
+	MarginRatio string  `json:"marginRatio"`
+	Price       *string `json:"price,omitempty"`
 }
 
 // Order represents a resting or historical order record.
@@ -163,27 +173,23 @@ type Position struct {
 	UpdatedAt     uint64 `json:"updatedAt"`
 }
 
-// PlaceOrderResult is a single entry in the response from order-placement endpoints.
+// PlaceOrderResult is a single entry in a place or replace response.
+// Code is per order; a successful outer API response can contain rejected items.
 type PlaceOrderResult struct {
-	OrderID uint64 `json:"orderID"`
-	ClOrdID string `json:"clOrdID"`
-	Status  string `json:"status"`
-	Message string `json:"message,omitempty"`
-}
-
-// CancelOrderResult is a single entry in the response from cancel endpoints.
-type CancelOrderResult struct {
-	OrderID *uint64 `json:"orderID,omitempty"`
+	Code    int     `json:"code"`
 	ClOrdID string  `json:"clOrdID"`
-	Status  string  `json:"status"`
-	Message string  `json:"message,omitempty"`
+	Error   *string `json:"error,omitempty"`
+	OrderID *uint64 `json:"orderID,omitempty"`
 }
 
-// LeverageResult is the response from the update-leverage endpoint.
-type LeverageResult struct {
-	Symbol     string `json:"symbol"`
-	Leverage   int    `json:"leverage"`
-	MarginMode string `json:"marginMode"`
+// CancelOrderResult is a single entry in a cancel response.
+// Code is per order; a successful outer API response can contain rejected items.
+type CancelOrderResult struct {
+	Code        int     `json:"code"`
+	Error       *string `json:"error,omitempty"`
+	OrderID     *uint64 `json:"orderID,omitempty"`
+	ClOrdID     *string `json:"clOrdID,omitempty"`
+	OrigClOrdID *string `json:"origClOrdID,omitempty"`
 }
 
 // ModifyOrderResult is the response from the perps modify-order endpoint.

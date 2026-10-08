@@ -41,7 +41,7 @@ func (c *Client) PerpsOrderBook(ctx context.Context, symbol string, depth int) (
 	u, _ := url.Parse(c.cfg.BaseURL + perpsBase + "/markets/" + symbol + "/orderbook")
 	if depth > 0 {
 		q := u.Query()
-		q.Set("depth", strconv.Itoa(depth))
+		q.Set("limit", strconv.Itoa(depth))
 		u.RawQuery = q.Encode()
 	}
 	req, err := newGetReq(ctx, u.String())
@@ -57,12 +57,12 @@ func (c *Client) PerpsOrderBook(ctx context.Context, symbol string, depth int) (
 }
 
 // PerpsBalances returns asset balances for address.
-func (c *Client) PerpsBalances(ctx context.Context, address string) ([]Balance, error) {
+func (c *Client) PerpsBalances(ctx context.Context, address string) ([]PerpsBalance, error) {
 	var wrapper blockTimeWrapper
 	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/balances", perpsBase, address), &wrapper); err != nil {
 		return nil, err
 	}
-	var result []Balance
+	var result []PerpsBalance
 	if len(wrapper.Balances) > 0 {
 		if err := json.Unmarshal(wrapper.Balances, &result); err != nil {
 			return nil, fmt.Errorf("perps: parse balances: %w", err)
@@ -230,20 +230,17 @@ func (c *Client) ReplacePerpsOrders(
 }
 
 // UpdateLeverage changes leverage for a perpetuals position.
-func (c *Client) UpdateLeverage(ctx context.Context, req *ptypes.UpdateLeverageRequest) (*LeverageResult, error) {
+// The endpoint returns no data on success.
+func (c *Client) UpdateLeverage(ctx context.Context, req *ptypes.UpdateLeverageRequest) error {
 	if c.perpsSgn == nil {
-		return nil, ErrNotAuthenticated
+		return ErrNotAuthenticated
 	}
 	nonce := c.nonce()
 	sig, err := c.perpsSgn.SignUpdateLeverageRequest(req, nonce)
 	if err != nil {
-		return nil, fmt.Errorf("perps: sign update leverage: %w", err)
+		return fmt.Errorf("perps: sign update leverage: %w", err)
 	}
-	var result LeverageResult
-	if err := c.postSigned(ctx, perpsBase+"/trade/leverage", req, sig, nonce, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
+	return c.postSigned(ctx, perpsBase+"/trade/leverage", req, sig, nonce, nil)
 }
 
 // UpdateMargin adjusts margin for a perpetuals position.

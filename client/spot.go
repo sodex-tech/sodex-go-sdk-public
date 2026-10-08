@@ -41,7 +41,7 @@ func (c *Client) SpotOrderBook(ctx context.Context, symbol string, depth int) (*
 	u, _ := url.Parse(c.cfg.BaseURL + spotBase + "/markets/" + symbol + "/orderbook")
 	if depth > 0 {
 		q := u.Query()
-		q.Set("depth", strconv.Itoa(depth))
+		q.Set("limit", strconv.Itoa(depth))
 		u.RawQuery = q.Encode()
 	}
 	req, err := newGetReq(ctx, u.String())

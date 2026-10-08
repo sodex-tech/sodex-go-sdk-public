@@ -88,10 +88,16 @@ func main() {
 		log.Fatal("no results returned from place")
 	}
 	order := placed[0]
-	fmt.Printf("Placed: orderID=%d clOrdID=%s status=%s\n\n", order.OrderID, order.ClOrdID, order.Status)
+	if order.Code != 0 || order.OrderID == nil {
+		if order.Error != nil {
+			log.Fatalf("PlacePerpsLimitOrder rejected: code=%d error=%s", order.Code, *order.Error)
+		}
+		log.Fatalf("PlacePerpsLimitOrder rejected: code=%d", order.Code)
+	}
+	fmt.Printf("Placed: orderID=%d clOrdID=%s\n\n", *order.OrderID, order.ClOrdID)
 
 	// ── 3. Cancel it ─────────────────────────────────────────────────────────
-	orderID := order.OrderID
+	orderID := *order.OrderID
 	cancelled, err := c.CancelPerpsOrders(ctx, &ptypes.CancelOrderRequest{
 		AccountID: accountID,
 		Cancels: []*ptypes.CancelOrder{
@@ -102,6 +108,12 @@ func main() {
 		log.Fatalf("CancelPerpsOrders: %v", err)
 	}
 	for _, r := range cancelled {
-		fmt.Printf("Cancelled: clOrdID=%s status=%s\n", r.ClOrdID, r.Status)
+		if r.Code != 0 {
+			if r.Error != nil {
+				log.Fatalf("CancelPerpsOrders rejected: code=%d error=%s", r.Code, *r.Error)
+			}
+			log.Fatalf("CancelPerpsOrders rejected: code=%d", r.Code)
+		}
+		fmt.Printf("Cancelled: orderID=%d\n", orderID)
 	}
 }

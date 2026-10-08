@@ -43,7 +43,7 @@ Prefix with `/api/v1/spot` or `/api/v1/perps`. Optional query param `accountID` 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /accounts/{address}/state` | Account ID, user ID, balances, open orders |
-| `GET /accounts/{address}/balances` | Balances: coinID, coin, total, locked |
+| `GET /accounts/{address}/balances` | Spot: id, coin, total, locked. Perps: id, coin, total, collateral, marginRatio, optional price |
 | `GET /accounts/{address}/orders` | Open orders. Optional: `?symbol=X` |
 | `GET /accounts/{address}/positions` | Open positions (perps only) |
 | `GET /accounts/{address}/orders/history` | Historical orders. Optional: `symbol`, `startTime`, `endTime`, `limit` |

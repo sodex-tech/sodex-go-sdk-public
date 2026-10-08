@@ -333,6 +333,30 @@ func printBalances(balances []client.Balance, f outputFormat) error {
 	}
 }
 
+func printPerpsBalances(balances []client.PerpsBalance, f outputFormat) error {
+	switch f {
+	case formatJSON:
+		return printJSON(balances)
+	case formatTable:
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "COIN_ID\tCOIN\tTOTAL\tCOLLATERAL\tMARGIN_RATIO\tPRICE")
+		for _, b := range balances {
+			price := ""
+			if b.Price != nil {
+				price = *b.Price
+			}
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n", b.CoinID, b.Coin, b.Total, b.Collateral, b.MarginRatio, price)
+		}
+		return w.Flush()
+	default:
+		for _, b := range balances {
+			fmt.Printf("%-12s  id=%-4d  total=%-18s  collateral=%-18s  marginRatio=%s\n",
+				b.Coin, b.CoinID, b.Total, b.Collateral, b.MarginRatio)
+		}
+		return nil
+	}
+}
+
 func printOrders(orders []client.Order, f outputFormat) error {
 	switch f {
 	case formatJSON:
@@ -623,19 +647,22 @@ Examples:
 				return err
 			}
 			ctx := context.Background()
-			var balances []client.Balance
 			switch engine {
 			case "spot":
-				balances, err = c.SpotBalances(ctx, addr)
+				balances, err := c.SpotBalances(ctx, addr)
+				if err != nil {
+					return err
+				}
+				return printBalances(balances, f)
 			case "perps":
-				balances, err = c.PerpsBalances(ctx, addr)
+				balances, err := c.PerpsBalances(ctx, addr)
+				if err != nil {
+					return err
+				}
+				return printPerpsBalances(balances, f)
 			default:
 				return fmt.Errorf("engine must be spot or perps")
 			}
-			if err != nil {
-				return err
-			}
-			return printBalances(balances, f)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "", "Output format: pretty|table|json")
@@ -830,11 +857,29 @@ Examples:
 				return err
 			}
 			if f == formatJSON {
-				return printJSON(results)
+				if err := printJSON(results); err != nil {
+					return err
+				}
+			} else {
+				for _, r := range results {
+					oid := "—"
+					if r.OrderID != nil {
+						oid = strconv.FormatUint(*r.OrderID, 10)
+					}
+					fmt.Printf("place  clOrdID=%-30s  orderID=%-12s  code=%d", r.ClOrdID, oid, r.Code)
+					if r.Error != nil {
+						fmt.Printf("  error=%s", *r.Error)
+					}
+					fmt.Println()
+				}
 			}
 			for _, r := range results {
-				fmt.Printf("placed  clOrdID=%-30s  orderID=%-12d  status=%s\n",
-					r.ClOrdID, r.OrderID, r.Status)
+				if r.Code != 0 {
+					if r.Error != nil {
+						return fmt.Errorf("place order %s failed (code %d): %s", r.ClOrdID, r.Code, *r.Error)
+					}
+					return fmt.Errorf("place order %s failed (code %d)", r.ClOrdID, r.Code)
+				}
 			}
 			return nil
 		},
@@ -921,15 +966,33 @@ Examples:
 				return err
 			}
 			if f == formatJSON {
-				return printJSON(results)
+				if err := printJSON(results); err != nil {
+					return err
+				}
+			} else {
+				for _, r := range results {
+					oid := "—"
+					if r.OrderID != nil {
+						oid = strconv.FormatUint(*r.OrderID, 10)
+					}
+					clOrdID := "—"
+					if r.ClOrdID != nil {
+						clOrdID = *r.ClOrdID
+					}
+					fmt.Printf("cancel  orderID=%-12s  clOrdID=%-30s  code=%d", oid, clOrdID, r.Code)
+					if r.Error != nil {
+						fmt.Printf("  error=%s", *r.Error)
+					}
+					fmt.Println()
+				}
 			}
 			for _, r := range results {
-				oid := "—"
-				if r.OrderID != nil {
-					oid = strconv.FormatUint(*r.OrderID, 10)
+				if r.Code != 0 {
+					if r.Error != nil {
+						return fmt.Errorf("cancel order failed (code %d): %s", r.Code, *r.Error)
+					}
+					return fmt.Errorf("cancel order failed (code %d)", r.Code)
 				}
-				fmt.Printf("cancelled  orderID=%-12s  clOrdID=%-30s  status=%s\n",
-					oid, r.ClOrdID, r.Status)
 			}
 			return nil
 		},
@@ -1013,21 +1076,16 @@ Examples:
 			if err != nil {
 				return err
 			}
-			result, err := c.UpdateLeverage(ctx, &ptypes.UpdateLeverageRequest{
+			marginMode := parseMarginMode(modeStr)
+			if err := c.UpdateLeverage(ctx, &ptypes.UpdateLeverageRequest{
 				AccountID:  accountID,
 				SymbolID:   symbolID,
 				Leverage:   uint32(lev),
-				MarginMode: parseMarginMode(modeStr),
-			})
-			if err != nil {
+				MarginMode: marginMode,
+			}); err != nil {
 				return err
 			}
-			if result != nil {
-				fmt.Printf("leverage updated: %s  leverage=%dx  mode=%s\n",
-					result.Symbol, result.Leverage, result.MarginMode)
-			} else {
-				fmt.Printf("leverage updated: %s  leverage=%dx\n", symbol, lev)
-			}
+			fmt.Printf("leverage updated: %s  leverage=%dx  mode=%s\n", symbol, lev, marginMode)
 			return nil
 		},
 	}
