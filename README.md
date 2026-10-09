@@ -37,7 +37,7 @@ func main() {
         log.Fatal(err)
     }
     for _, t := range tickers[:3] {
-        fmt.Printf("%s last=%s vol=%s\n", t.Symbol, t.LastPrice, t.Volume)
+        fmt.Printf("%s last=%s vol=%s\n", t.Symbol, t.LastPx, t.BaseVolume)
     }
 }
 ```
@@ -178,7 +178,11 @@ Exported constants in `client/`:
 
 The client tracks a strictly-monotonic millisecond nonce internally, so callers never manage nonces when using the REST client.
 
-Batch place, cancel, and replace methods return one result per order. Check each result's `Code` (`0` means accepted); a batch can contain rejected items even when the outer API request succeeded. Rejected items provide `Error`, and `OrderID` is present only when returned by the engine. `PerpsBalances` returns `[]client.PerpsBalance` with collateral and margin fields. `UpdateLeverage` returns only an `error` because the endpoint has no success payload.
+REST return models now live in `client/types`, with distinct spot and perps response types. For example, `SpotSymbols` returns `[]*types.SpotSymbol` and `PerpsSymbols` returns `[]*types.PerpsSymbol`. Balance, open-order, and position methods return snapshot structs containing `BlockTime`, `BlockHeight`, and the corresponding slice. Order books expose `Bids` and `Asks` as `[][]string`.
+
+This is a breaking type migration for callers using the former shared `client.Symbol`, `client.Ticker`, `client.Order`, or flat balance/order/position slices. Use the engine-specific types and read snapshot entries from `Balances`, `Orders`, or `Positions`.
+
+Batch place, cancel, and replace methods return one result per order. Check each result's `Code` (`0` means accepted); a batch can contain rejected items even when the outer API request succeeded. Rejected items provide `Error`, and `OrderID` is present only when returned by the engine. `SpotTransfer` and `PerpsTransfer` return a receipt with `ID`. `UpdateLeverage` returns only an `error` because the endpoint has no success payload. WebSocket payload models are in `ws/types`; depth snapshots and updates use separate types.
 
 ## Advanced: low-level signing
 

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	rpctypes "github.com/sodex-tech/sodex-go-sdk-public/client/types"
 	perpssgn "github.com/sodex-tech/sodex-go-sdk-public/perps/signer"
 	spotsgn "github.com/sodex-tech/sodex-go-sdk-public/spot/signer"
 )
@@ -229,7 +230,7 @@ func (c *Client) getHistory(ctx context.Context, path string, filter HistoryFilt
 // klines issues GET /<base>/markets/<symbol>/klines.
 func (c *Client) klines(
 	ctx context.Context, base, symbol, interval string, filter HistoryFilter,
-) ([]Candle, error) {
+) ([]*rpctypes.Candle, error) {
 	if interval == "" {
 		return nil, fmt.Errorf("client: klines: interval is required")
 	}
@@ -253,7 +254,7 @@ func (c *Client) klines(
 	if err != nil {
 		return nil, err
 	}
-	var result []Candle
+	var result []*rpctypes.Candle
 	if err := c.do(req, &result); err != nil {
 		return nil, err
 	}
@@ -263,7 +264,7 @@ func (c *Client) klines(
 // publicTrades issues GET /<base>/markets/<symbol>/trades.
 func (c *Client) publicTrades(
 	ctx context.Context, base, symbol string, limit int,
-) ([]PublicTrade, error) {
+) ([]*rpctypes.Trade, error) {
 	u, err := url.Parse(fmt.Sprintf("%s%s/markets/%s/trades", c.cfg.BaseURL, base, symbol))
 	if err != nil {
 		return nil, fmt.Errorf("client: parse public trades URL: %w", err)
@@ -277,7 +278,7 @@ func (c *Client) publicTrades(
 	if err != nil {
 		return nil, err
 	}
-	var result []PublicTrade
+	var result []*rpctypes.Trade
 	if err := c.do(req, &result); err != nil {
 		return nil, err
 	}
@@ -286,21 +287,17 @@ func (c *Client) publicTrades(
 
 // ordersHistory issues GET /<base>/accounts/<address>/orders/history.
 func (c *Client) ordersHistory(
-	ctx context.Context, base, address string, filter HistoryFilter,
-) ([]Order, error) {
-	var result []Order
+	ctx context.Context, base, address string, filter HistoryFilter, result any,
+) error {
 	path := fmt.Sprintf("%s/accounts/%s/orders/history", base, address)
-	if err := c.getHistory(ctx, path, filter, &result); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return c.getHistory(ctx, path, filter, result)
 }
 
 // userTrades issues GET /<base>/accounts/<address>/trades.
 func (c *Client) userTrades(
 	ctx context.Context, base, address string, filter HistoryFilter,
-) ([]UserTrade, error) {
-	var result []UserTrade
+) ([]*rpctypes.AccountTrade, error) {
+	var result []*rpctypes.AccountTrade
 	path := fmt.Sprintf("%s/accounts/%s/trades", base, address)
 	if err := c.getHistory(ctx, path, filter, &result); err != nil {
 		return nil, err

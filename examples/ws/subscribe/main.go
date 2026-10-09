@@ -19,6 +19,7 @@ import (
 
 	"github.com/sodex-tech/sodex-go-sdk-public/client"
 	"github.com/sodex-tech/sodex-go-sdk-public/ws"
+	wstypes "github.com/sodex-tech/sodex-go-sdk-public/ws/types"
 )
 
 func main() {
@@ -54,7 +55,7 @@ func main() {
 }
 
 func handleTrade(push ws.Push) {
-	var trades []ws.Trade
+	var trades []*wstypes.WsTrade
 	if err := json.Unmarshal(push.Data, &trades); err != nil {
 		log.Printf("decode trade: %v", err)
 		return
@@ -65,19 +66,31 @@ func handleTrade(push ws.Push) {
 }
 
 func handleOrderBook(push ws.Push) {
-	var book ws.L2Book
-	if err := json.Unmarshal(push.Data, &book); err != nil {
-		log.Printf("decode l4Book: %v", err)
-		return
+	var symbol string
+	var bids, asks [][]string
+	if push.Type == "snapshot" {
+		var book wstypes.WsDepthSnapshot
+		if err := json.Unmarshal(push.Data, &book); err != nil {
+			log.Printf("decode l4Book snapshot: %v", err)
+			return
+		}
+		symbol, bids, asks = book.Symbol, book.Bids, book.Asks
+	} else {
+		var book wstypes.WsDepthUpdate
+		if err := json.Unmarshal(push.Data, &book); err != nil {
+			log.Printf("decode l4Book update: %v", err)
+			return
+		}
+		symbol, bids, asks = book.Symbol, book.Bids, book.Asks
 	}
 	bestBid, bestAsk := "-", "-"
-	if len(book.Bids) > 0 {
-		bestBid = fmt.Sprintf("%s × %s", book.Bids[0][0], book.Bids[0][1])
+	if len(bids) > 0 {
+		bestBid = fmt.Sprintf("%s × %s", bids[0][0], bids[0][1])
 	}
-	if len(book.Asks) > 0 {
-		bestAsk = fmt.Sprintf("%s × %s", book.Asks[0][0], book.Asks[0][1])
+	if len(asks) > 0 {
+		bestAsk = fmt.Sprintf("%s × %s", asks[0][0], asks[0][1])
 	}
-	fmt.Printf("[%s] %s  bid %s  ask %s\n", push.Type, book.Symbol, bestBid, bestAsk)
+	fmt.Printf("[%s] %s  bid %s  ask %s\n", push.Type, symbol, bestBid, bestAsk)
 }
 
 func errorsIsContextCancelled(err error) bool {

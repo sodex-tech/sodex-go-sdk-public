@@ -22,6 +22,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/sodex-tech/sodex-go-sdk-public/client"
+	rpctypes "github.com/sodex-tech/sodex-go-sdk-public/client/types"
 	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 	ptypes "github.com/sodex-tech/sodex-go-sdk-public/perps/types"
 )
@@ -55,24 +56,24 @@ func main() {
 	if err != nil {
 		log.Fatalf("PerpsSymbols: %v", err)
 	}
-	var btc *client.Symbol
-	for i, s := range symbols {
-		if s.Symbol == "BTC-USD" {
-			btc = &symbols[i]
+	var btc *rpctypes.PerpsSymbol
+	for _, s := range symbols {
+		if s.Name == "BTC-USD" {
+			btc = s
 			break
 		}
 	}
 	if btc == nil {
 		log.Fatal("BTC-USD not found in PerpsSymbols")
 	}
-	fmt.Printf("BTC-USD symbolID=%d tickSize=%s stepSize=%s\n\n", btc.SymbolID, btc.TickSize, btc.StepSize)
+	fmt.Printf("BTC-USD symbolID=%d tickSize=%s stepSize=%s\n\n", btc.ID, btc.TickSize, btc.StepSize)
 
 	// ── 2. Place a GTC limit buy far below market (won't fill) ───────────────
 	clOrdID := fmt.Sprintf("demo-%d", time.Now().UnixMilli())
 	placed, err := c.PlacePerpsLimitOrder(
 		ctx,
 		accountID,
-		btc.SymbolID,
+		btc.ID,
 		clOrdID,
 		enums.OrderSideBuy,
 		enums.PositionSideBoth,
@@ -101,7 +102,7 @@ func main() {
 	cancelled, err := c.CancelPerpsOrders(ctx, &ptypes.CancelOrderRequest{
 		AccountID: accountID,
 		Cancels: []*ptypes.CancelOrder{
-			{SymbolID: btc.SymbolID, OrderID: &orderID},
+			{SymbolID: btc.ID, OrderID: &orderID},
 		},
 	})
 	if err != nil {

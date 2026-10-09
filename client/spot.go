@@ -2,15 +2,16 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
 
 	"github.com/shopspring/decimal"
+	rpctypes "github.com/sodex-tech/sodex-go-sdk-public/client/types"
 	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 	ctypes "github.com/sodex-tech/sodex-go-sdk-public/common/types"
 	stypes "github.com/sodex-tech/sodex-go-sdk-public/spot/types"
+	wstypes "github.com/sodex-tech/sodex-go-sdk-public/ws/types"
 )
 
 const spotBase = "/api/v1/spot"
@@ -18,8 +19,8 @@ const spotBase = "/api/v1/spot"
 // ── Market data (unauthenticated) ─────────────────────────────────────────────
 
 // SpotSymbols returns all available spot trading pairs.
-func (c *Client) SpotSymbols(ctx context.Context) ([]Symbol, error) {
-	var result []Symbol
+func (c *Client) SpotSymbols(ctx context.Context) ([]*rpctypes.SpotSymbol, error) {
+	var result []*rpctypes.SpotSymbol
 	if err := c.get(ctx, spotBase+"/markets/symbols", &result); err != nil {
 		return nil, err
 	}
@@ -27,8 +28,8 @@ func (c *Client) SpotSymbols(ctx context.Context) ([]Symbol, error) {
 }
 
 // SpotTickers returns 24-hour rolling stats for all spot pairs.
-func (c *Client) SpotTickers(ctx context.Context) ([]Ticker, error) {
-	var result []Ticker
+func (c *Client) SpotTickers(ctx context.Context) ([]*rpctypes.SpotTicker, error) {
+	var result []*rpctypes.SpotTicker
 	if err := c.get(ctx, spotBase+"/markets/tickers", &result); err != nil {
 		return nil, err
 	}
@@ -37,7 +38,7 @@ func (c *Client) SpotTickers(ctx context.Context) ([]Ticker, error) {
 
 // SpotOrderBook returns the order book snapshot for symbol.
 // symbol is the internal name (e.g. vBTC_vUSDC). Pass depth <= 0 to use the API default.
-func (c *Client) SpotOrderBook(ctx context.Context, symbol string, depth int) (*OrderBook, error) {
+func (c *Client) SpotOrderBook(ctx context.Context, symbol string, depth int) (*rpctypes.OrderBook, error) {
 	u, _ := url.Parse(c.cfg.BaseURL + spotBase + "/markets/" + symbol + "/orderbook")
 	if depth > 0 {
 		q := u.Query()
@@ -48,11 +49,10 @@ func (c *Client) SpotOrderBook(ctx context.Context, symbol string, depth int) (*
 	if err != nil {
 		return nil, err
 	}
-	var result OrderBook
+	var result rpctypes.OrderBook
 	if err := c.do(req, &result); err != nil {
 		return nil, err
 	}
-	result.Symbol = symbol
 	return &result, nil
 }
 
@@ -64,7 +64,7 @@ func (c *Client) SpotOrderBook(ctx context.Context, symbol string, depth int) (*
 // Only filter.StartTime / filter.EndTime / filter.Limit apply (default 500, max 1500).
 func (c *Client) SpotKlines(
 	ctx context.Context, symbol, interval string, filter HistoryFilter,
-) ([]Candle, error) {
+) ([]*rpctypes.Candle, error) {
 	return c.klines(ctx, spotBase, symbol, interval, filter)
 }
 
@@ -72,7 +72,7 @@ func (c *Client) SpotKlines(
 // Only limit applies (default 50, max 500).
 func (c *Client) SpotPublicTrades(
 	ctx context.Context, symbol string, limit int,
-) ([]PublicTrade, error) {
+) ([]*rpctypes.Trade, error) {
 	return c.publicTrades(ctx, spotBase, symbol, limit)
 }
 
@@ -80,61 +80,53 @@ func (c *Client) SpotPublicTrades(
 // Supports filtering by symbol, time range, and limit.
 func (c *Client) SpotOrdersHistory(
 	ctx context.Context, address string, filter HistoryFilter,
-) ([]Order, error) {
-	return c.ordersHistory(ctx, spotBase, address, filter)
+) ([]*rpctypes.SpotOrder, error) {
+	var result []*rpctypes.SpotOrder
+	if err := c.ordersHistory(ctx, spotBase, address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // SpotUserTrades returns the user's trade (fill) history on the spot engine.
 // Supports filtering by symbol, orderID, time range, and limit.
 func (c *Client) SpotUserTrades(
 	ctx context.Context, address string, filter HistoryFilter,
-) ([]UserTrade, error) {
+) ([]*rpctypes.AccountTrade, error) {
 	return c.userTrades(ctx, spotBase, address, filter)
 }
 
 // SpotAccountInfo returns the account ID and user ID for the given address.
-func (c *Client) SpotAccountInfo(ctx context.Context, address string) (*AccountInfo, error) {
-	var result AccountInfo
+func (c *Client) SpotAccountInfo(ctx context.Context, address string) (*wstypes.WsSpotAccountState, error) {
+	var result wstypes.WsSpotAccountState
 	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/state", spotBase, address), &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
 }
 
-// SpotBalances returns asset balances for address.
-func (c *Client) SpotBalances(ctx context.Context, address string) ([]Balance, error) {
-	var wrapper blockTimeWrapper
-	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/balances", spotBase, address), &wrapper); err != nil {
+// SpotBalances returns asset balances with snapshot block metadata.
+func (c *Client) SpotBalances(ctx context.Context, address string) (*rpctypes.SpotAccountBalances, error) {
+	var result rpctypes.SpotAccountBalances
+	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/balances", spotBase, address), &result); err != nil {
 		return nil, err
 	}
-	var result []Balance
-	if len(wrapper.Balances) > 0 {
-		if err := json.Unmarshal(wrapper.Balances, &result); err != nil {
-			return nil, fmt.Errorf("spot: parse balances: %w", err)
-		}
-	}
-	return result, nil
+	return &result, nil
 }
 
 // SpotOrders returns all open orders for address.
-func (c *Client) SpotOrders(ctx context.Context, address string) ([]Order, error) {
-	var wrapper blockTimeWrapper
-	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/orders", spotBase, address), &wrapper); err != nil {
+func (c *Client) SpotOrders(ctx context.Context, address string) (*rpctypes.SpotAccountOpenOrders, error) {
+	var result rpctypes.SpotAccountOpenOrders
+	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/orders", spotBase, address), &result); err != nil {
 		return nil, err
 	}
-	var result []Order
-	if len(wrapper.Orders) > 0 {
-		if err := json.Unmarshal(wrapper.Orders, &result); err != nil {
-			return nil, fmt.Errorf("spot: parse orders: %w", err)
-		}
-	}
-	return result, nil
+	return &result, nil
 }
 
 // ── Authenticated trading methods ─────────────────────────────────────────────
 
 // PlaceSpotOrders submits a batch of spot orders. A private key must be configured.
-func (c *Client) PlaceSpotOrders(ctx context.Context, req *stypes.BatchNewOrderRequest) ([]PlaceOrderResult, error) {
+func (c *Client) PlaceSpotOrders(ctx context.Context, req *stypes.BatchNewOrderRequest) ([]*rpctypes.BatchNewOrderResult, error) {
 	if c.spotSgn == nil {
 		return nil, ErrNotAuthenticated
 	}
@@ -143,7 +135,7 @@ func (c *Client) PlaceSpotOrders(ctx context.Context, req *stypes.BatchNewOrderR
 	if err != nil {
 		return nil, fmt.Errorf("spot: sign new order: %w", err)
 	}
-	var result []PlaceOrderResult
+	var result []*rpctypes.BatchNewOrderResult
 	if err := c.postSigned(ctx, spotBase+"/trade/orders/batch", req, sig, nonce, &result); err != nil {
 		return nil, err
 	}
@@ -151,7 +143,7 @@ func (c *Client) PlaceSpotOrders(ctx context.Context, req *stypes.BatchNewOrderR
 }
 
 // CancelSpotOrders submits a batch of spot order cancellations.
-func (c *Client) CancelSpotOrders(ctx context.Context, req *stypes.BatchCancelOrderRequest) ([]CancelOrderResult, error) {
+func (c *Client) CancelSpotOrders(ctx context.Context, req *stypes.BatchCancelOrderRequest) ([]*rpctypes.BatchCancelOrderResult, error) {
 	if c.spotSgn == nil {
 		return nil, ErrNotAuthenticated
 	}
@@ -160,7 +152,7 @@ func (c *Client) CancelSpotOrders(ctx context.Context, req *stypes.BatchCancelOr
 	if err != nil {
 		return nil, fmt.Errorf("spot: sign cancel order: %w", err)
 	}
-	var result []CancelOrderResult
+	var result []*rpctypes.BatchCancelOrderResult
 	if err := c.deleteSigned(ctx, spotBase+"/trade/orders/batch", req, sig, nonce, &result); err != nil {
 		return nil, err
 	}
@@ -168,7 +160,7 @@ func (c *Client) CancelSpotOrders(ctx context.Context, req *stypes.BatchCancelOr
 }
 
 // ReplaceSpotOrders replaces a batch of existing spot orders.
-func (c *Client) ReplaceSpotOrders(ctx context.Context, req *ctypes.ReplaceOrderRequest) ([]PlaceOrderResult, error) {
+func (c *Client) ReplaceSpotOrders(ctx context.Context, req *ctypes.ReplaceOrderRequest) ([]*rpctypes.ReplaceOrderResult, error) {
 	if c.spotSgn == nil {
 		return nil, ErrNotAuthenticated
 	}
@@ -177,24 +169,28 @@ func (c *Client) ReplaceSpotOrders(ctx context.Context, req *ctypes.ReplaceOrder
 	if err != nil {
 		return nil, fmt.Errorf("spot: sign replace order: %w", err)
 	}
-	var result []PlaceOrderResult
+	var result []*rpctypes.ReplaceOrderResult
 	if err := c.postSigned(ctx, spotBase+"/trade/orders/replace", req, sig, nonce, &result); err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-// SpotTransfer transfers assets between spot accounts.
-func (c *Client) SpotTransfer(ctx context.Context, req *ctypes.TransferAssetRequest) error {
+// SpotTransfer transfers assets between spot accounts and returns the transfer ID.
+func (c *Client) SpotTransfer(ctx context.Context, req *ctypes.TransferAssetRequest) (*rpctypes.TransferAssetResponse, error) {
 	if c.spotSgn == nil {
-		return ErrNotAuthenticated
+		return nil, ErrNotAuthenticated
 	}
 	nonce := c.nonce()
 	sig, err := c.spotSgn.SignTransferAssetRequest(req, nonce)
 	if err != nil {
-		return fmt.Errorf("spot: sign transfer: %w", err)
+		return nil, fmt.Errorf("spot: sign transfer: %w", err)
 	}
-	return c.postSigned(ctx, spotBase+"/accounts/transfers", req, sig, nonce, nil)
+	var result rpctypes.TransferAssetResponse
+	if err := c.postSigned(ctx, spotBase+"/accounts/transfers", req, sig, nonce, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // ScheduleSpotCancel arms (or clears) a "dead-man's switch" that automatically
@@ -225,7 +221,7 @@ func (c *Client) PlaceSpotLimitOrder(
 	side enums.OrderSide,
 	tif enums.TimeInForce,
 	price, qty decimal.Decimal,
-) ([]PlaceOrderResult, error) {
+) ([]*rpctypes.BatchNewOrderResult, error) {
 	return c.PlaceSpotOrders(ctx, &stypes.BatchNewOrderRequest{
 		AccountID: accountID,
 		Orders: []*stypes.BatchNewOrderItem{{
@@ -247,7 +243,7 @@ func (c *Client) PlaceSpotMarketOrder(
 	clOrdID string,
 	side enums.OrderSide,
 	qty decimal.Decimal,
-) ([]PlaceOrderResult, error) {
+) ([]*rpctypes.BatchNewOrderResult, error) {
 	return c.PlaceSpotOrders(ctx, &stypes.BatchNewOrderRequest{
 		AccountID: accountID,
 		Orders: []*stypes.BatchNewOrderItem{{

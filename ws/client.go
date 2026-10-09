@@ -381,6 +381,27 @@ func pushForSubscription(push Push, params SubscribeParams) (Push, bool) {
 			return Push{}, false
 		}
 		push.Data, _ = json.Marshal(matched)
+	case ChannelCoinPrice:
+		if len(params.Coins) == 0 {
+			return push, true
+		}
+		var items []json.RawMessage
+		if err := json.Unmarshal(push.Data, &items); err != nil {
+			return push, true
+		}
+		matched := make([]json.RawMessage, 0, len(items))
+		for _, item := range items {
+			var data struct {
+				Coin string `json:"a"`
+			}
+			if json.Unmarshal(item, &data) == nil && slices.Contains(params.Coins, data.Coin) {
+				matched = append(matched, item)
+			}
+		}
+		if len(matched) == 0 {
+			return Push{}, false
+		}
+		push.Data, _ = json.Marshal(matched)
 	case ChannelCandle, ChannelL2Book, ChannelL4Book:
 		var data struct {
 			Symbol   string `json:"s"`
