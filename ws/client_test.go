@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	wstypes "github.com/sodex-tech/sodex-go-sdk-public/ws/types"
 )
 
-// TestDispatchRoutesBySubscriptionParams checks symbol filtering for array pushes
+// TestDispatchRoutesBySubscriptionParams checks symbol and coin filtering for array pushes
 // and symbol/interval filtering for single-object pushes on shared channels.
 func TestDispatchRoutesBySubscriptionParams(t *testing.T) {
 	c, err := NewClient("http://example.com", "perps")
@@ -20,7 +21,7 @@ func TestDispatchRoutesBySubscriptionParams(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var btcTrades, ethTrades []Trade
+	var btcTrades, ethTrades []*wstypes.WsTrade
 	_, _ = c.Subscribe(SubscribeParams{Channel: ChannelTrade, Symbols: []string{"BTC-USD"}}, func(push Push) {
 		if err := json.Unmarshal(push.Data, &btcTrades); err != nil {
 			t.Fatal(err)
@@ -34,6 +35,22 @@ func TestDispatchRoutesBySubscriptionParams(t *testing.T) {
 	c.dispatch([]byte(`{"channel":"trade","type":"update","data":[{"s":"BTC-USD"},{"s":"ETH-USD"}]}`))
 	if len(btcTrades) != 1 || btcTrades[0].Symbol != "BTC-USD" || len(ethTrades) != 1 || ethTrades[0].Symbol != "ETH-USD" {
 		t.Fatalf("trade routing: BTC=%+v ETH=%+v", btcTrades, ethTrades)
+	}
+
+	var btcPrices, usdcPrices []*wstypes.WsCoinPrice
+	_, _ = c.Subscribe(SubscribeParams{Channel: ChannelCoinPrice, Coins: []string{"BTC"}}, func(push Push) {
+		if err := json.Unmarshal(push.Data, &btcPrices); err != nil {
+			t.Fatal(err)
+		}
+	})
+	_, _ = c.Subscribe(SubscribeParams{Channel: ChannelCoinPrice, Coins: []string{"vUSDC"}}, func(push Push) {
+		if err := json.Unmarshal(push.Data, &usdcPrices); err != nil {
+			t.Fatal(err)
+		}
+	})
+	c.dispatch([]byte(`{"channel":"coinPrice","type":"update","data":[{"a":"BTC","p":"100"},{"a":"vUSDC","p":"1"}]}`))
+	if len(btcPrices) != 1 || btcPrices[0].Coin != "BTC" || len(usdcPrices) != 1 || usdcPrices[0].Coin != "vUSDC" {
+		t.Fatalf("coin price routing: BTC=%+v vUSDC=%+v", btcPrices, usdcPrices)
 	}
 
 	var oneMinute, fiveMinute int
@@ -179,36 +196,40 @@ func TestAccountChannelRequiresSeparateClients(t *testing.T) {
 	}
 }
 
-// TestBookUpdateSequenceFields checks snapshot and update payloads preserve the gateway's distinct update IDs.
+// TestBookUpdateSequenceFields checks snapshot and delta IDs using their distinct Gateway payload types.
 func TestBookUpdateSequenceFields(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		payload string
-		firstID *uint64
-		lastID  int64
+		firstID uint64
+		lastID  uint64
 	}{
 		{name: "snapshot", payload: `{"channel":"l4Book","type":"snapshot","data":{"s":"BTC-USD","u":7,"a":[],"b":[]}}`, lastID: 7},
-		{name: "update", payload: `{"channel":"l4Book","type":"update","data":{"s":"BTC-USD","U":8,"u":10,"a":[["100","1"]],"b":[]}}`, firstID: uint64Ptr(8), lastID: 10},
+		{name: "update", payload: `{"channel":"l4Book","type":"update","data":{"s":"BTC-USD","U":8,"u":10,"a":[["100","1"]],"b":[]}}`, firstID: 8, lastID: 10},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var push Push
 			if err := json.Unmarshal([]byte(tc.payload), &push); err != nil {
 				t.Fatal(err)
 			}
-			var book L2Book
-			if err := json.Unmarshal(push.Data, &book); err != nil {
-				t.Fatal(err)
-			}
-			if book.UpdateID != tc.lastID || (book.FirstUpdateID == nil) != (tc.firstID == nil) || (tc.firstID != nil && *book.FirstUpdateID != *tc.firstID) {
-				t.Fatalf("book = %+v, want first ID %v and last ID %d", book, tc.firstID, tc.lastID)
+			if push.Type == "snapshot" {
+				var book wstypes.WsDepthSnapshot
+				if err := json.Unmarshal(push.Data, &book); err != nil || book.UpdateID != tc.lastID {
+					t.Fatalf("snapshot = %+v, error = %v", book, err)
+				}
+			} else {
+				var book wstypes.WsDepthUpdate
+				if err := json.Unmarshal(push.Data, &book); err != nil || book.FirstUpdateID != tc.firstID || book.LastUpdateID != tc.lastID {
+					t.Fatalf("update = %+v, error = %v", book, err)
+				}
 			}
 		})
 	}
 }
 
-// TestAccountTradeBuilderFee checks that account trade pushes retain the optional builder fee.
+// TestAccountTradeBuilderFee checks the copied account trade type retains the optional builder fee.
 func TestAccountTradeBuilderFee(t *testing.T) {
-	var trade AccountTrade
+	var trade wstypes.WsUserSpotTrade
 	if err := json.Unmarshal([]byte(`{"s":"BTC-USD","f":"0.02","bf":"0.01"}`), &trade); err != nil {
 		t.Fatal(err)
 	}
@@ -216,5 +237,3 @@ func TestAccountTradeBuilderFee(t *testing.T) {
 		t.Fatalf("account trade: %+v", trade)
 	}
 }
-
-func uint64Ptr(value uint64) *uint64 { return &value }

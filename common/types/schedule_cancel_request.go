@@ -7,7 +7,6 @@ type ScheduleCancelRequest struct {
 	ScheduledTimestamp *uint64 `json:"scheduledTimestamp,omitempty"`
 }
 
-// ActionName returns the action name
 func (req *ScheduleCancelRequest) ActionName() string {
 	return ScheduleCancelRequestTypeName
 }

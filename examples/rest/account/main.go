@@ -52,8 +52,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("PerpsBalances: %v", err)
 	}
-	fmt.Printf("Balances (%d):\n", len(balances))
-	for _, b := range balances {
+	fmt.Printf("Balances (%d):\n", len(balances.Balances))
+	for _, b := range balances.Balances {
 		fmt.Printf("  %-8s total=%-20s collateral=%-20s marginRatio=%s\n", b.Coin, b.Total, b.Collateral, b.MarginRatio)
 	}
 
@@ -61,8 +61,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("PerpsPositions: %v", err)
 	}
-	fmt.Printf("\nOpen positions (%d):\n", len(positions))
-	for _, p := range positions {
+	fmt.Printf("\nOpen positions (%d):\n", len(positions.Positions))
+	for _, p := range positions.Positions {
 		fmt.Printf("  %-12s side=%-5s size=%-12s avgEntry=%-12s initialMargin=%-12s realizedPnL=%s\n",
 			p.Symbol, p.PositionSide, p.Size, p.AvgEntryPrice, p.InitialMargin, p.RealizedPnL)
 	}
@@ -71,10 +71,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("PerpsOrders: %v", err)
 	}
-	fmt.Printf("\nOpen orders (%d):\n", len(orders))
-	for _, o := range orders {
+	fmt.Printf("\nOpen orders (%d):\n", len(orders.Orders))
+	for _, o := range orders.Orders {
 		fmt.Printf("  [%d] %-12s %-4s %-6s qty=%-10s price=%-10s status=%s\n",
-			o.OrderID, o.Symbol, o.Side, o.Type, orderField(o.OrigQty), orderField(o.Price), o.Status)
+			o.OrderID, o.Symbol, o.Side, o.Type, orderField(o.Quantity), orderField(o.Price), o.Status)
 	}
 
 	// ── Spot ─────────────────────────────────────────────────────────────────
@@ -90,8 +90,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("SpotBalances: %v", err)
 	}
-	fmt.Printf("Balances (%d):\n", len(spotBalances))
-	for _, b := range spotBalances {
+	fmt.Printf("Balances (%d):\n", len(spotBalances.Balances))
+	for _, b := range spotBalances.Balances {
 		fmt.Printf("  %-8s total=%-20s locked=%s\n", b.Coin, b.Total, b.Locked)
 	}
 }

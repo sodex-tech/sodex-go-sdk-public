@@ -2,12 +2,12 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
 
 	"github.com/shopspring/decimal"
+	rpctypes "github.com/sodex-tech/sodex-go-sdk-public/client/types"
 	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 	ctypes "github.com/sodex-tech/sodex-go-sdk-public/common/types"
 	ptypes "github.com/sodex-tech/sodex-go-sdk-public/perps/types"
@@ -18,8 +18,8 @@ const perpsBase = "/api/v1/perps"
 // ── Market data (unauthenticated) ─────────────────────────────────────────────
 
 // PerpsSymbols returns all available perpetuals trading pairs.
-func (c *Client) PerpsSymbols(ctx context.Context) ([]Symbol, error) {
-	var result []Symbol
+func (c *Client) PerpsSymbols(ctx context.Context) ([]*rpctypes.PerpsSymbol, error) {
+	var result []*rpctypes.PerpsSymbol
 	if err := c.get(ctx, perpsBase+"/markets/symbols", &result); err != nil {
 		return nil, err
 	}
@@ -27,8 +27,8 @@ func (c *Client) PerpsSymbols(ctx context.Context) ([]Symbol, error) {
 }
 
 // PerpsTickers returns 24-hour rolling stats for all perps pairs.
-func (c *Client) PerpsTickers(ctx context.Context) ([]Ticker, error) {
-	var result []Ticker
+func (c *Client) PerpsTickers(ctx context.Context) ([]*rpctypes.PerpsTicker, error) {
+	var result []*rpctypes.PerpsTicker
 	if err := c.get(ctx, perpsBase+"/markets/tickers", &result); err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (c *Client) PerpsTickers(ctx context.Context) ([]Ticker, error) {
 
 // PerpsOrderBook returns the order book snapshot for symbol.
 // Pass depth <= 0 to use the API default.
-func (c *Client) PerpsOrderBook(ctx context.Context, symbol string, depth int) (*OrderBook, error) {
+func (c *Client) PerpsOrderBook(ctx context.Context, symbol string, depth int) (*rpctypes.OrderBook, error) {
 	u, _ := url.Parse(c.cfg.BaseURL + perpsBase + "/markets/" + symbol + "/orderbook")
 	if depth > 0 {
 		q := u.Query()
@@ -48,42 +48,29 @@ func (c *Client) PerpsOrderBook(ctx context.Context, symbol string, depth int) (
 	if err != nil {
 		return nil, err
 	}
-	var result OrderBook
+	var result rpctypes.OrderBook
 	if err := c.do(req, &result); err != nil {
 		return nil, err
 	}
-	result.Symbol = symbol
 	return &result, nil
 }
 
 // PerpsBalances returns asset balances for address.
-func (c *Client) PerpsBalances(ctx context.Context, address string) ([]PerpsBalance, error) {
-	var wrapper blockTimeWrapper
-	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/balances", perpsBase, address), &wrapper); err != nil {
+func (c *Client) PerpsBalances(ctx context.Context, address string) (*rpctypes.PerpsAccountBalances, error) {
+	var result rpctypes.PerpsAccountBalances
+	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/balances", perpsBase, address), &result); err != nil {
 		return nil, err
 	}
-	var result []PerpsBalance
-	if len(wrapper.Balances) > 0 {
-		if err := json.Unmarshal(wrapper.Balances, &result); err != nil {
-			return nil, fmt.Errorf("perps: parse balances: %w", err)
-		}
-	}
-	return result, nil
+	return &result, nil
 }
 
 // PerpsOrders returns all open orders for address.
-func (c *Client) PerpsOrders(ctx context.Context, address string) ([]Order, error) {
-	var wrapper blockTimeWrapper
-	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/orders", perpsBase, address), &wrapper); err != nil {
+func (c *Client) PerpsOrders(ctx context.Context, address string) (*rpctypes.PerpsAccountOpenOrders, error) {
+	var result rpctypes.PerpsAccountOpenOrders
+	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/orders", perpsBase, address), &result); err != nil {
 		return nil, err
 	}
-	var result []Order
-	if len(wrapper.Orders) > 0 {
-		if err := json.Unmarshal(wrapper.Orders, &result); err != nil {
-			return nil, fmt.Errorf("perps: parse orders: %w", err)
-		}
-	}
-	return result, nil
+	return &result, nil
 }
 
 // PerpsKlines returns historical OHLCV candles for a perps symbol.
@@ -95,7 +82,7 @@ func (c *Client) PerpsOrders(ctx context.Context, address string) ([]Order, erro
 // StartTime, EndTime, Limit (default 500, max 1500).
 func (c *Client) PerpsKlines(
 	ctx context.Context, symbol, interval string, filter HistoryFilter,
-) ([]Candle, error) {
+) ([]*rpctypes.Candle, error) {
 	return c.klines(ctx, perpsBase, symbol, interval, filter)
 }
 
@@ -103,7 +90,7 @@ func (c *Client) PerpsKlines(
 // Only Limit on the filter applies (default 50, max 500).
 func (c *Client) PerpsPublicTrades(
 	ctx context.Context, symbol string, limit int,
-) ([]PublicTrade, error) {
+) ([]*rpctypes.Trade, error) {
 	return c.publicTrades(ctx, perpsBase, symbol, limit)
 }
 
@@ -111,15 +98,19 @@ func (c *Client) PerpsPublicTrades(
 // Supports filtering by symbol, time range, and limit.
 func (c *Client) PerpsOrdersHistory(
 	ctx context.Context, address string, filter HistoryFilter,
-) ([]Order, error) {
-	return c.ordersHistory(ctx, perpsBase, address, filter)
+) ([]*rpctypes.PerpsOrder, error) {
+	var result []*rpctypes.PerpsOrder
+	if err := c.ordersHistory(ctx, perpsBase, address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // PerpsUserTrades returns the authenticated user's trade (fill) history on the perps engine.
 // Supports filtering by symbol, orderID, time range, and limit.
 func (c *Client) PerpsUserTrades(
 	ctx context.Context, address string, filter HistoryFilter,
-) ([]UserTrade, error) {
+) ([]*rpctypes.AccountTrade, error) {
 	return c.userTrades(ctx, perpsBase, address, filter)
 }
 
@@ -127,8 +118,8 @@ func (c *Client) PerpsUserTrades(
 // Filter supports Symbol, StartTime, EndTime, Limit.
 func (c *Client) PerpsFundingHistory(
 	ctx context.Context, address string, filter HistoryFilter,
-) ([]FundingPayment, error) {
-	var result []FundingPayment
+) ([]*rpctypes.PerpsFunding, error) {
+	var result []*rpctypes.PerpsFunding
 	path := fmt.Sprintf("%s/accounts/%s/fundings", perpsBase, address)
 	if err := c.getHistory(ctx, path, filter, &result); err != nil {
 		return nil, err
@@ -137,24 +128,18 @@ func (c *Client) PerpsFundingHistory(
 }
 
 // PerpsPositions returns all open positions for address.
-func (c *Client) PerpsPositions(ctx context.Context, address string) ([]Position, error) {
-	var wrapper blockTimeWrapper
-	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/positions", perpsBase, address), &wrapper); err != nil {
+func (c *Client) PerpsPositions(ctx context.Context, address string) (*rpctypes.PerpsAccountPositions, error) {
+	var result rpctypes.PerpsAccountPositions
+	if err := c.get(ctx, fmt.Sprintf("%s/accounts/%s/positions", perpsBase, address), &result); err != nil {
 		return nil, err
 	}
-	var result []Position
-	if len(wrapper.Positions) > 0 {
-		if err := json.Unmarshal(wrapper.Positions, &result); err != nil {
-			return nil, fmt.Errorf("perps: parse positions: %w", err)
-		}
-	}
-	return result, nil
+	return &result, nil
 }
 
 // ── Authenticated trading methods ─────────────────────────────────────────────
 
 // PlacePerpsOrder submits a perpetuals order batch. A private key must be configured.
-func (c *Client) PlacePerpsOrder(ctx context.Context, req *ptypes.NewOrderRequest) ([]PlaceOrderResult, error) {
+func (c *Client) PlacePerpsOrder(ctx context.Context, req *ptypes.NewOrderRequest) ([]*rpctypes.NewOrderResult, error) {
 	if c.perpsSgn == nil {
 		return nil, ErrNotAuthenticated
 	}
@@ -163,7 +148,7 @@ func (c *Client) PlacePerpsOrder(ctx context.Context, req *ptypes.NewOrderReques
 	if err != nil {
 		return nil, fmt.Errorf("perps: sign new order: %w", err)
 	}
-	var result []PlaceOrderResult
+	var result []*rpctypes.NewOrderResult
 	if err := c.postSigned(ctx, perpsBase+"/trade/orders", req, sig, nonce, &result); err != nil {
 		return nil, err
 	}
@@ -171,7 +156,7 @@ func (c *Client) PlacePerpsOrder(ctx context.Context, req *ptypes.NewOrderReques
 }
 
 // CancelPerpsOrders cancels perpetuals orders.
-func (c *Client) CancelPerpsOrders(ctx context.Context, req *ptypes.CancelOrderRequest) ([]CancelOrderResult, error) {
+func (c *Client) CancelPerpsOrders(ctx context.Context, req *ptypes.CancelOrderRequest) ([]*rpctypes.CancelOrderResult, error) {
 	if c.perpsSgn == nil {
 		return nil, ErrNotAuthenticated
 	}
@@ -180,7 +165,7 @@ func (c *Client) CancelPerpsOrders(ctx context.Context, req *ptypes.CancelOrderR
 	if err != nil {
 		return nil, fmt.Errorf("perps: sign cancel order: %w", err)
 	}
-	var result []CancelOrderResult
+	var result []*rpctypes.CancelOrderResult
 	if err := c.deleteSigned(ctx, perpsBase+"/trade/orders", req, sig, nonce, &result); err != nil {
 		return nil, err
 	}
@@ -192,7 +177,7 @@ func (c *Client) CancelPerpsOrders(ctx context.Context, req *ptypes.CancelOrderR
 // via OrderID or ClOrdID (exactly one).
 func (c *Client) ModifyPerpsOrder(
 	ctx context.Context, req *ptypes.ModifyOrderRequest,
-) (*ModifyOrderResult, error) {
+) (*rpctypes.ModifyOrderResult, error) {
 	if c.perpsSgn == nil {
 		return nil, ErrNotAuthenticated
 	}
@@ -201,7 +186,7 @@ func (c *Client) ModifyPerpsOrder(
 	if err != nil {
 		return nil, fmt.Errorf("perps: sign modify order: %w", err)
 	}
-	var result ModifyOrderResult
+	var result rpctypes.ModifyOrderResult
 	if err := c.postSigned(ctx, perpsBase+"/trade/orders/modify", req, sig, nonce, &result); err != nil {
 		return nil, err
 	}
@@ -213,7 +198,7 @@ func (c *Client) ModifyPerpsOrder(
 // is rejected (e.g. invalid price), the original is also cancelled.
 func (c *Client) ReplacePerpsOrders(
 	ctx context.Context, req *ctypes.ReplaceOrderRequest,
-) ([]PlaceOrderResult, error) {
+) ([]*rpctypes.ReplaceOrderResult, error) {
 	if c.perpsSgn == nil {
 		return nil, ErrNotAuthenticated
 	}
@@ -222,7 +207,7 @@ func (c *Client) ReplacePerpsOrders(
 	if err != nil {
 		return nil, fmt.Errorf("perps: sign replace order: %w", err)
 	}
-	var result []PlaceOrderResult
+	var result []*rpctypes.ReplaceOrderResult
 	if err := c.postSigned(ctx, perpsBase+"/trade/orders/replace", req, sig, nonce, &result); err != nil {
 		return nil, err
 	}
@@ -256,17 +241,21 @@ func (c *Client) UpdateMargin(ctx context.Context, req *ptypes.UpdateMarginReque
 	return c.postSigned(ctx, perpsBase+"/trade/margin", req, sig, nonce, nil)
 }
 
-// PerpsTransfer transfers assets between perps accounts.
-func (c *Client) PerpsTransfer(ctx context.Context, req *ctypes.TransferAssetRequest) error {
+// PerpsTransfer transfers assets between perps accounts and returns the transfer ID.
+func (c *Client) PerpsTransfer(ctx context.Context, req *ctypes.TransferAssetRequest) (*rpctypes.TransferAssetResponse, error) {
 	if c.perpsSgn == nil {
-		return ErrNotAuthenticated
+		return nil, ErrNotAuthenticated
 	}
 	nonce := c.nonce()
 	sig, err := c.perpsSgn.SignTransferAssetRequest(req, nonce)
 	if err != nil {
-		return fmt.Errorf("perps: sign transfer: %w", err)
+		return nil, fmt.Errorf("perps: sign transfer: %w", err)
 	}
-	return c.postSigned(ctx, perpsBase+"/accounts/transfers", req, sig, nonce, nil)
+	var result rpctypes.TransferAssetResponse
+	if err := c.postSigned(ctx, perpsBase+"/accounts/transfers", req, sig, nonce, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // SchedulePerpsCancel arms (or clears) a "dead-man's switch" that automatically
@@ -299,7 +288,7 @@ func (c *Client) PlacePerpsLimitOrder(
 	tif enums.TimeInForce,
 	price, qty decimal.Decimal,
 	reduceOnly bool,
-) ([]PlaceOrderResult, error) {
+) ([]*rpctypes.NewOrderResult, error) {
 	return c.PlacePerpsOrder(ctx, &ptypes.NewOrderRequest{
 		AccountID: accountID,
 		SymbolID:  symbolID,
@@ -326,7 +315,7 @@ func (c *Client) PlacePerpsMarketOrder(
 	posSide enums.PositionSide,
 	qty decimal.Decimal,
 	reduceOnly bool,
-) ([]PlaceOrderResult, error) {
+) ([]*rpctypes.NewOrderResult, error) {
 	return c.PlacePerpsOrder(ctx, &ptypes.NewOrderRequest{
 		AccountID: accountID,
 		SymbolID:  symbolID,

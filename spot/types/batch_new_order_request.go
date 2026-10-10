@@ -19,14 +19,12 @@ type BatchNewOrderItem struct {
 	Funds       *decimal.Decimal  `json:"funds,omitempty"`
 }
 
-// BatchNewOrderRequest represents a batch new order request
 type BatchNewOrderRequest struct {
 	AccountID uint64                `json:"accountID"`
 	Orders    []*BatchNewOrderItem  `json:"orders"`
 	Builder   *ctypes.BuilderParams `json:"builder,omitempty"`
 }
 
-// ActionName returns the action name for the batch new order request
 func (req *BatchNewOrderRequest) ActionName() string {
 	return BatchNewOrderRequestTypeName
 }

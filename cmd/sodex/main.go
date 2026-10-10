@@ -18,11 +18,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sodex-tech/sodex-go-sdk-public/client"
+	rpctypes "github.com/sodex-tech/sodex-go-sdk-public/client/types"
 	"github.com/sodex-tech/sodex-go-sdk-public/common/enums"
 	ctypes "github.com/sodex-tech/sodex-go-sdk-public/common/types"
 	ptypes "github.com/sodex-tech/sodex-go-sdk-public/perps/types"
 	stypes "github.com/sodex-tech/sodex-go-sdk-public/spot/types"
 	"github.com/sodex-tech/sodex-go-sdk-public/ws"
+	wstypes "github.com/sodex-tech/sodex-go-sdk-public/ws/types"
 )
 
 // ── Global state ──────────────────────────────────────────────────────────────
@@ -197,26 +199,35 @@ func parseMarginMode(s string) enums.MarginMode {
 // name (case-insensitive) against internal name or display name.
 // Returns (symbolID, internalName).
 func resolveSymbol(ctx context.Context, c *client.Client, engine, symbol string) (uint64, string, error) {
-	var symbols []client.Symbol
-	var err error
+	upper := strings.ToUpper(symbol)
+	match := func(id uint64, name, display string) (uint64, string, bool) {
+		ok := strings.EqualFold(name, symbol) || strings.EqualFold(display, symbol) ||
+			strings.EqualFold(display, strings.ReplaceAll(upper, "-", "/"))
+		return id, name, ok
+	}
 	switch engine {
 	case "spot":
-		symbols, err = c.SpotSymbols(ctx)
+		symbols, err := c.SpotSymbols(ctx)
+		if err != nil {
+			return 0, "", fmt.Errorf("fetch spot symbols: %w", err)
+		}
+		for _, s := range symbols {
+			if id, name, ok := match(s.ID, s.Name, s.DisplayName); ok {
+				return id, name, nil
+			}
+		}
 	case "perps":
-		symbols, err = c.PerpsSymbols(ctx)
+		symbols, err := c.PerpsSymbols(ctx)
+		if err != nil {
+			return 0, "", fmt.Errorf("fetch perps symbols: %w", err)
+		}
+		for _, s := range symbols {
+			if id, name, ok := match(s.ID, s.Name, s.DisplayName); ok {
+				return id, name, nil
+			}
+		}
 	default:
 		return 0, "", fmt.Errorf("unknown engine %q: must be spot or perps", engine)
-	}
-	if err != nil {
-		return 0, "", fmt.Errorf("fetch %s symbols: %w", engine, err)
-	}
-	upper := strings.ToUpper(symbol)
-	for _, s := range symbols {
-		if strings.EqualFold(s.Symbol, symbol) ||
-			strings.EqualFold(s.DisplayName, symbol) ||
-			strings.EqualFold(s.DisplayName, strings.ReplaceAll(upper, "-", "/")) {
-			return s.SymbolID, s.Symbol, nil
-		}
 	}
 	return 0, "", fmt.Errorf("symbol %q not found in %s markets; run `sodex markets %s` to see available symbols", symbol, engine, engine)
 }
@@ -242,52 +253,79 @@ func printJSON(v any) error {
 
 // ── Print helpers ─────────────────────────────────────────────────────────────
 
-func printSymbols(symbols []client.Symbol, f outputFormat) error {
+func printSymbols(data any, f outputFormat) error {
+	if f == formatJSON {
+		return printJSON(data)
+	}
+	type row struct {
+		id                                 uint64
+		name, display, base, quote, status string
+		pricePrecision, quantityPrecision  int32
+	}
+	var symbols []row
+	switch typed := data.(type) {
+	case []*rpctypes.SpotSymbol:
+		for _, s := range typed {
+			symbols = append(symbols, row{s.ID, s.Name, s.DisplayName, s.BaseCoin, s.QuoteCoin, string(s.Status), s.PricePrecision, s.QuantityPrecision})
+		}
+	case []*rpctypes.PerpsSymbol:
+		for _, s := range typed {
+			symbols = append(symbols, row{s.ID, s.Name, s.DisplayName, s.BaseCoin, s.QuoteCoin, string(s.Status), s.PricePrecision, s.QuantityPrecision})
+		}
+	}
 	switch f {
-	case formatJSON:
-		return printJSON(symbols)
 	case formatTable:
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "ID\tNAME\tDISPLAY\tBASE\tQUOTE\tSTATUS\tPRICE_PREC\tQTY_PREC")
 		for _, s := range symbols {
 			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%d\t%d\n",
-				s.SymbolID, s.Symbol, s.DisplayName, s.BaseAsset, s.QuoteAsset,
-				s.Status, s.PricePrecision, s.QuantityPrecision)
+				s.id, s.name, s.display, s.base, s.quote,
+				s.status, s.pricePrecision, s.quantityPrecision)
 		}
 		return w.Flush()
 	default:
 		for _, s := range symbols {
 			fmt.Printf("%-20s  id=%-6d  name=%-20s  base=%-10s  quote=%-10s  status=%s\n",
-				s.DisplayName, s.SymbolID, s.Symbol, s.BaseAsset, s.QuoteAsset, s.Status)
+				s.display, s.id, s.name, s.base, s.quote, s.status)
 		}
 		return nil
 	}
 }
 
-func printTickers(tickers []client.Ticker, f outputFormat) error {
+func printTickers(data any, f outputFormat) error {
+	if f == formatJSON {
+		return printJSON(data)
+	}
+	var tickers []*rpctypes.SpotTicker
+	switch typed := data.(type) {
+	case []*rpctypes.SpotTicker:
+		tickers = typed
+	case []*rpctypes.PerpsTicker:
+		for _, t := range typed {
+			tickers = append(tickers, t.SpotTicker)
+		}
+	}
 	switch f {
-	case formatJSON:
-		return printJSON(tickers)
 	case formatTable:
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "SYMBOL\tLAST\tBID\tASK\tCHANGE%\tVOLUME")
 		for _, t := range tickers {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%.2f%%\t%s\n",
-				t.Symbol, t.LastPrice, t.BidPrice, t.AskPrice,
-				t.PriceChangePercent, t.Volume)
+				t.Symbol, t.LastPx, t.BidPx, t.AskPx,
+				t.ChangePct, t.BaseVolume)
 		}
 		return w.Flush()
 	default:
 		for _, t := range tickers {
 			fmt.Printf("%-20s  last=%-14s  bid=%-14s  ask=%-14s  change=%-10s  vol=%s\n",
-				t.Symbol, t.LastPrice, t.BidPrice, t.AskPrice,
-				fmt.Sprintf("%.2f%%", t.PriceChangePercent), t.Volume)
+				t.Symbol, t.LastPx, t.BidPx, t.AskPx,
+				fmt.Sprintf("%.2f%%", t.ChangePct), t.BaseVolume)
 		}
 		return nil
 	}
 }
 
-func printOrderBook(ob *client.OrderBook, depth int, f outputFormat) error {
+func printOrderBook(ob *rpctypes.OrderBook, symbol string, depth int, f outputFormat) error {
 	if f == formatJSON {
 		return printJSON(ob)
 	}
@@ -300,43 +338,45 @@ func printOrderBook(ob *client.OrderBook, depth int, f outputFormat) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	fmt.Fprintf(w, "Order Book: %s\n\n", ob.Symbol)
+	fmt.Fprintf(w, "Order Book: %s\n\n", symbol)
 	fmt.Fprintln(w, "ASKS (price / qty)")
 	for i := maxRows - 1; i >= 0; i-- {
-		fmt.Fprintf(w, "  %s\t%s\n", ob.Asks[i].Price, ob.Asks[i].Quantity)
+		fmt.Fprintf(w, "  %s\t%s\n", ob.Asks[i][0], ob.Asks[i][1])
 	}
 	fmt.Fprintln(w, "  ─────────────────")
 	fmt.Fprintln(w, "BIDS (price / qty)")
 	for i := 0; i < maxRows; i++ {
-		fmt.Fprintf(w, "  %s\t%s\n", ob.Bids[i].Price, ob.Bids[i].Quantity)
+		fmt.Fprintf(w, "  %s\t%s\n", ob.Bids[i][0], ob.Bids[i][1])
 	}
 	return w.Flush()
 }
 
-func printBalances(balances []client.Balance, f outputFormat) error {
+func printBalances(snapshot *rpctypes.SpotAccountBalances, f outputFormat) error {
+	balances := snapshot.Balances
 	switch f {
 	case formatJSON:
-		return printJSON(balances)
+		return printJSON(snapshot)
 	case formatTable:
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "COIN_ID\tCOIN\tTOTAL\tLOCKED")
 		for _, b := range balances {
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", b.CoinID, b.Coin, b.Total, b.Locked)
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", b.ID, b.Coin, b.Total, b.Locked)
 		}
 		return w.Flush()
 	default:
 		for _, b := range balances {
 			fmt.Printf("%-12s  id=%-4d  total=%-18s  locked=%-18s\n",
-				b.Coin, b.CoinID, b.Total, b.Locked)
+				b.Coin, b.ID, b.Total, b.Locked)
 		}
 		return nil
 	}
 }
 
-func printPerpsBalances(balances []client.PerpsBalance, f outputFormat) error {
+func printPerpsBalances(snapshot *rpctypes.PerpsAccountBalances, f outputFormat) error {
+	balances := snapshot.Balances
 	switch f {
 	case formatJSON:
-		return printJSON(balances)
+		return printJSON(snapshot)
 	case formatTable:
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "COIN_ID\tCOIN\tTOTAL\tCOLLATERAL\tMARGIN_RATIO\tPRICE")
@@ -345,36 +385,46 @@ func printPerpsBalances(balances []client.PerpsBalance, f outputFormat) error {
 			if b.Price != nil {
 				price = *b.Price
 			}
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n", b.CoinID, b.Coin, b.Total, b.Collateral, b.MarginRatio, price)
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\n", b.ID, b.Coin, b.Total, b.Collateral, b.MarginRatio, price)
 		}
 		return w.Flush()
 	default:
 		for _, b := range balances {
 			fmt.Printf("%-12s  id=%-4d  total=%-18s  collateral=%-18s  marginRatio=%s\n",
-				b.Coin, b.CoinID, b.Total, b.Collateral, b.MarginRatio)
+				b.Coin, b.ID, b.Total, b.Collateral, b.MarginRatio)
 		}
 		return nil
 	}
 }
 
-func printOrders(orders []client.Order, f outputFormat) error {
+func printOrders(data any, f outputFormat) error {
+	if f == formatJSON {
+		return printJSON(data)
+	}
+	var orders []*rpctypes.SpotOrder
+	switch typed := data.(type) {
+	case *rpctypes.SpotAccountOpenOrders:
+		orders = typed.Orders
+	case *rpctypes.PerpsAccountOpenOrders:
+		for _, o := range typed.Orders {
+			orders = append(orders, o.SpotOrder)
+		}
+	}
 	switch f {
-	case formatJSON:
-		return printJSON(orders)
 	case formatTable:
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "ORDER_ID\tCL_ORD_ID\tSYMBOL\tSIDE\tTYPE\tPRICE\tQTY\tFILLED\tSTATUS")
 		for _, o := range orders {
 			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				o.OrderID, o.ClOrdID, o.Symbol, o.Side, o.Type,
-				orderField(o.Price), orderField(o.OrigQty), o.ExecutedQty, o.Status)
+				orderField(o.Price), orderField(o.Quantity), o.ExecutedQty, o.Status)
 		}
 		return w.Flush()
 	default:
 		for _, o := range orders {
 			fmt.Printf("%-12d  cl=%s  %s  %s/%s  price=%-14s  qty=%-12s  filled=%-12s  status=%s\n",
 				o.OrderID, o.ClOrdID, o.Symbol, o.Side, o.Type,
-				orderField(o.Price), orderField(o.OrigQty), o.ExecutedQty, o.Status)
+				orderField(o.Price), orderField(o.Quantity), o.ExecutedQty, o.Status)
 		}
 		return nil
 	}
@@ -387,10 +437,11 @@ func orderField(value *string) string {
 	return *value
 }
 
-func printPositions(positions []client.Position, f outputFormat) error {
+func printPositions(snapshot *rpctypes.PerpsAccountPositions, f outputFormat) error {
+	positions := snapshot.Positions
 	switch f {
 	case formatJSON:
-		return printJSON(positions)
+		return printJSON(snapshot)
 	case formatTable:
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "SYMBOL\tSIDE\tSIZE\tAVG_ENTRY\tINITIAL_MARGIN\tREALIZED_PNL\tLEVERAGE\tACTIVE")
@@ -430,7 +481,7 @@ func newMarketsCmd(g *globalFlags) *cobra.Command {
 				return err
 			}
 			ctx := context.Background()
-			var symbols []client.Symbol
+			var symbols any
 			switch engine {
 			case "spot":
 				symbols, err = c.SpotSymbols(ctx)
@@ -466,7 +517,7 @@ func newTickersCmd(g *globalFlags) *cobra.Command {
 				return err
 			}
 			ctx := context.Background()
-			var tickers []client.Ticker
+			var tickers any
 			switch engine {
 			case "spot":
 				tickers, err = c.SpotTickers(ctx)
@@ -532,7 +583,7 @@ Examples:
 				return err
 			}
 
-			var ob *client.OrderBook
+			var ob *rpctypes.OrderBook
 			switch engine {
 			case "spot":
 				ob, err = c.SpotOrderBook(ctx, internalName, depth)
@@ -542,7 +593,7 @@ Examples:
 			if err != nil {
 				return err
 			}
-			return printOrderBook(ob, depth, f)
+			return printOrderBook(ob, internalName, depth, f)
 		},
 	}
 	cmd.Flags().IntVar(&depth, "depth", 20, "Number of levels to display")
@@ -596,10 +647,10 @@ Examples:
 			case formatTable:
 				w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 				fmt.Fprintln(w, "ADDRESS\tACCOUNT_ID\tUSER_ID")
-				fmt.Fprintf(w, "%s\t%d\t%d\n", info.Address, info.AccountID, info.UserID)
+				fmt.Fprintf(w, "%s\t%d\t%d\n", info.User.Hex(), info.AccountID, info.UserID)
 				return w.Flush()
 			default:
-				fmt.Printf("Address:    %s\n", info.Address)
+				fmt.Printf("Address:    %s\n", info.User.Hex())
 				fmt.Printf("Account ID: %d\n", info.AccountID)
 				fmt.Printf("User ID:    %d\n", info.UserID)
 				return nil
@@ -724,7 +775,7 @@ func newOrdersListCmd(g *globalFlags) *cobra.Command {
 				return err
 			}
 			ctx := context.Background()
-			var orders []client.Order
+			var orders any
 			switch engine {
 			case "spot":
 				orders, err = c.SpotOrders(ctx, addr)
@@ -820,7 +871,8 @@ Examples:
 			clOrdID := fmt.Sprintf("sodex-cli-%d", time.Now().UnixMilli())
 			f, _ := resolveFormat(firstNonEmpty(format, g.format))
 
-			var results []client.PlaceOrderResult
+			var results any
+			var receipts []*rpctypes.BatchNewOrderResult
 			switch engine {
 			case "spot":
 				item := &stypes.BatchNewOrderItem{
@@ -834,10 +886,11 @@ Examples:
 				if !price.IsZero() {
 					item.Price = &price
 				}
-				results, err = c.PlaceSpotOrders(ctx, &stypes.BatchNewOrderRequest{
+				receipts, err = c.PlaceSpotOrders(ctx, &stypes.BatchNewOrderRequest{
 					AccountID: accountID,
 					Orders:    []*stypes.BatchNewOrderItem{item},
 				})
+				results = receipts
 			case "perps":
 				rawOrder := &ptypes.RawOrder{
 					ClOrdID:      clOrdID,
@@ -852,11 +905,16 @@ Examples:
 				if !price.IsZero() {
 					rawOrder.Price = &price
 				}
-				results, err = c.PlacePerpsOrder(ctx, &ptypes.NewOrderRequest{
+				perpsResults, placeErr := c.PlacePerpsOrder(ctx, &ptypes.NewOrderRequest{
 					AccountID: accountID,
 					SymbolID:  symbolID,
 					Orders:    []*ptypes.RawOrder{rawOrder},
 				})
+				err = placeErr
+				results = perpsResults
+				for _, r := range perpsResults {
+					receipts = append(receipts, &rpctypes.BatchNewOrderResult{Code: r.Code, ClOrdID: r.ClOrdID, OrderID: r.OrderID, Error: r.Error})
+				}
 			default:
 				return fmt.Errorf("engine must be spot or perps")
 			}
@@ -868,7 +926,7 @@ Examples:
 					return err
 				}
 			} else {
-				for _, r := range results {
+				for _, r := range receipts {
 					oid := "—"
 					if r.OrderID != nil {
 						oid = strconv.FormatUint(*r.OrderID, 10)
@@ -880,7 +938,7 @@ Examples:
 					fmt.Println()
 				}
 			}
-			for _, r := range results {
+			for _, r := range receipts {
 				if r.Code != 0 {
 					if r.Error != nil {
 						return fmt.Errorf("place order %s failed (code %d): %s", r.ClOrdID, r.Code, *r.Error)
@@ -938,7 +996,8 @@ Examples:
 			ctx := context.Background()
 			f, _ := resolveFormat(firstNonEmpty(format, g.format))
 
-			var results []client.CancelOrderResult
+			var results any
+			var receipts []*rpctypes.CancelOrderResult
 			switch engine {
 			case "spot":
 				item := &stypes.BatchCancelOrderItem{
@@ -948,10 +1007,16 @@ Examples:
 				if orderID != 0 {
 					item.OrderID = &orderID
 				}
-				results, err = c.CancelSpotOrders(ctx, &stypes.BatchCancelOrderRequest{
+				spotResults, cancelErr := c.CancelSpotOrders(ctx, &stypes.BatchCancelOrderRequest{
 					AccountID: accountID,
 					Cancels:   []*stypes.BatchCancelOrderItem{item},
 				})
+				err = cancelErr
+				results = spotResults
+				for _, r := range spotResults {
+					id := r.ClOrdID
+					receipts = append(receipts, &rpctypes.CancelOrderResult{Code: r.Code, ClOrdID: &id, OrderID: r.OrderID, Error: r.Error})
+				}
 			case "perps":
 				cancel := &ptypes.CancelOrder{
 					SymbolID: symbolID,
@@ -962,10 +1027,11 @@ Examples:
 				if clOrdID != "" {
 					cancel.ClOrdID = &clOrdID
 				}
-				results, err = c.CancelPerpsOrders(ctx, &ptypes.CancelOrderRequest{
+				receipts, err = c.CancelPerpsOrders(ctx, &ptypes.CancelOrderRequest{
 					AccountID: accountID,
 					Cancels:   []*ptypes.CancelOrder{cancel},
 				})
+				results = receipts
 			default:
 				return fmt.Errorf("engine must be spot or perps")
 			}
@@ -977,7 +1043,7 @@ Examples:
 					return err
 				}
 			} else {
-				for _, r := range results {
+				for _, r := range receipts {
 					oid := "—"
 					if r.OrderID != nil {
 						oid = strconv.FormatUint(*r.OrderID, 10)
@@ -993,7 +1059,7 @@ Examples:
 					fmt.Println()
 				}
 			}
-			for _, r := range results {
+			for _, r := range receipts {
 				if r.Code != 0 {
 					if r.Error != nil {
 						return fmt.Errorf("cancel order failed (code %d): %s", r.Code, *r.Error)
@@ -1142,11 +1208,12 @@ Examples:
 				Amount:        amount,
 				Type:          enums.TransferAssetType(transferType),
 			}
-			if err := c.SpotTransfer(context.Background(), req); err != nil {
+			receipt, err := c.SpotTransfer(context.Background(), req)
+			if err != nil {
 				return err
 			}
-			fmt.Printf("transfer submitted: from=%d to=%d coin=%d amount=%s\n",
-				fromAccountID, toAccountID, coinID, amount.String())
+			fmt.Printf("transfer submitted: id=%d from=%d to=%d coin=%d amount=%s\n",
+				receipt.ID, fromAccountID, toAccountID, coinID, amount.String())
 			return nil
 		},
 	}
@@ -1453,7 +1520,7 @@ func newSubOrderUpdatesCmd(g *globalFlags) *cobra.Command {
 			return runSubscription(g, engine, ws.SubscribeParams{
 				Channel: ws.ChannelAccountOrderUpd,
 				User:    addr,
-			}, orderUpdatesPrinter(f))
+			}, orderUpdatesPrinter(f, engine))
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "", "Output format: pretty|json")
@@ -1476,7 +1543,7 @@ func newSubFillsCmd(g *globalFlags) *cobra.Command {
 			return runSubscription(g, engine, ws.SubscribeParams{
 				Channel: ws.ChannelAccountTrade,
 				User:    addr,
-			}, fillsPrinter(f))
+			}, fillsPrinter(f, engine))
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "", "Output format: pretty|json")
@@ -1504,12 +1571,12 @@ func tradesPrinter(f outputFormat) func(ws.Push) {
 			printJSON(p)
 			return
 		}
-		var trades []ws.Trade
+		var trades []*wstypes.WsTrade
 		if err := json.Unmarshal(p.Data, &trades); err != nil {
 			return
 		}
 		for _, t := range trades {
-			ts := time.UnixMilli(t.TradeTime).Format("15:04:05.000")
+			ts := time.UnixMilli(int64(t.TradeTime)).Format("15:04:05.000")
 			fmt.Printf("%s  %-20s  %-4s  price=%-14s  qty=%-12s\n",
 				ts, t.Symbol, t.Side, t.Price, t.Quantity)
 		}
@@ -1522,33 +1589,45 @@ func orderbookPrinter(f outputFormat) func(ws.Push) {
 			printJSON(p)
 			return
 		}
-		var book ws.L2Book
-		if err := json.Unmarshal(p.Data, &book); err != nil {
-			return
+		var symbol string
+		var updateID uint64
+		var asks, bids [][]string
+		if p.Type == "snapshot" {
+			var book wstypes.WsDepthSnapshot
+			if err := json.Unmarshal(p.Data, &book); err != nil {
+				return
+			}
+			symbol, updateID, asks, bids = book.Symbol, book.UpdateID, book.Asks, book.Bids
+		} else {
+			var book wstypes.WsDepthUpdate
+			if err := json.Unmarshal(p.Data, &book); err != nil {
+				return
+			}
+			symbol, updateID, asks, bids = book.Symbol, book.LastUpdateID, book.Asks, book.Bids
 		}
 		// Clear screen and print
 		fmt.Print("\033[2J\033[H")
-		fmt.Printf("Order Book: %s  (update=%d)\n\n", book.Symbol, book.UpdateID)
+		fmt.Printf("Order Book: %s  (update=%d)\n\n", symbol, updateID)
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 		fmt.Fprintln(w, "ASKS (price / qty)")
-		maxRows := len(book.Asks)
+		maxRows := len(asks)
 		if maxRows > 20 {
 			maxRows = 20
 		}
 		for i := maxRows - 1; i >= 0; i-- {
-			if len(book.Asks[i]) >= 2 {
-				fmt.Fprintf(w, "  %s\t%s\n", book.Asks[i][0], book.Asks[i][1])
+			if len(asks[i]) >= 2 {
+				fmt.Fprintf(w, "  %s\t%s\n", asks[i][0], asks[i][1])
 			}
 		}
 		fmt.Fprintln(w, "  ─────────────────")
 		fmt.Fprintln(w, "BIDS (price / qty)")
-		maxRows = len(book.Bids)
+		maxRows = len(bids)
 		if maxRows > 20 {
 			maxRows = 20
 		}
 		for i := 0; i < maxRows; i++ {
-			if len(book.Bids[i]) >= 2 {
-				fmt.Fprintf(w, "  %s\t%s\n", book.Bids[i][0], book.Bids[i][1])
+			if len(bids[i]) >= 2 {
+				fmt.Fprintf(w, "  %s\t%s\n", bids[i][0], bids[i][1])
 			}
 		}
 		w.Flush()
@@ -1561,14 +1640,14 @@ func tickerPrinter(f outputFormat) func(ws.Push) {
 			printJSON(p)
 			return
 		}
-		var tickers []ws.Ticker
+		var tickers []*wstypes.WsTicker
 		if err := json.Unmarshal(p.Data, &tickers); err != nil {
 			return
 		}
 		for _, t := range tickers {
 			fmt.Printf("%-20s  last=%-14s  bid=%-14s  ask=%-14s  change=%.2f%%  vol=%s\n",
-				t.Symbol, t.LastPrice, t.BidPrice, t.AskPrice,
-				t.PriceChangePercent, t.Volume)
+				t.Symbol, t.ClosePx, t.BidPx, t.AskPx,
+				t.ChangePct, t.BaseVolume)
 		}
 	}
 }
@@ -1579,19 +1658,17 @@ func candlePrinter(f outputFormat) func(ws.Push) {
 			printJSON(p)
 			return
 		}
-		var candles []ws.Candle
-		if err := json.Unmarshal(p.Data, &candles); err != nil {
+		var candle wstypes.Candle
+		if err := json.Unmarshal(p.Data, &candle); err != nil {
 			return
 		}
-		for _, c := range candles {
-			ts := time.UnixMilli(c.OpenTime).Format("2006-01-02 15:04")
-			closed := ""
-			if c.Closed {
-				closed = " [CLOSED]"
-			}
-			fmt.Printf("%s  %-20s  %s  O=%-12s H=%-12s L=%-12s C=%-12s V=%-12s%s\n",
-				ts, c.Symbol, c.Interval, c.Open, c.High, c.Low, c.Close, c.Volume, closed)
+		ts := time.UnixMilli(int64(candle.StartTimestamp)).Format("2006-01-02 15:04")
+		closed := ""
+		if candle.Closed {
+			closed = " [CLOSED]"
 		}
+		fmt.Printf("%s  %-20s  %s  O=%-12s H=%-12s L=%-12s C=%-12s V=%-12s%s\n",
+			ts, candle.Symbol, candle.Interval, candle.OpenPrice, candle.HighPrice, candle.LowPrice, candle.ClosePrice, candle.BaseVolume, closed)
 	}
 }
 
@@ -1601,13 +1678,13 @@ func bboPrinter(f outputFormat) func(ws.Push) {
 			printJSON(p)
 			return
 		}
-		var tickers []ws.BookTicker
+		var tickers []*wstypes.WsBookTicker
 		if err := json.Unmarshal(p.Data, &tickers); err != nil {
 			return
 		}
 		for _, t := range tickers {
 			fmt.Printf("%-20s  bid=%-14s(%s)  ask=%-14s(%s)\n",
-				t.Symbol, t.BidPrice, t.BidQty, t.AskPrice, t.AskQty)
+				t.Symbol, t.BidPx, t.BidSz, t.AskPx, t.AskSz)
 		}
 	}
 }
@@ -1618,51 +1695,81 @@ func markPricePrinter(f outputFormat) func(ws.Push) {
 			printJSON(p)
 			return
 		}
-		var prices []ws.MarkPrice
+		var prices []*wstypes.WsMarkPrice
 		if err := json.Unmarshal(p.Data, &prices); err != nil {
 			return
 		}
 		for _, m := range prices {
 			fmt.Printf("%-20s  mark=%-14s  index=%-14s  funding=%-10s  OI=%s\n",
-				m.Symbol, m.MarkPx, m.IndexPx, m.FundingRate, m.OpenInterest)
+				m.Symbol, m.MarkPrice.MarkPrice, m.IndexPrice, m.FundingRate, m.OpenInterest)
 		}
 	}
 }
 
-func orderUpdatesPrinter(f outputFormat) func(ws.Push) {
+func orderUpdatesPrinter(f outputFormat, engine string) func(ws.Push) {
 	return func(p ws.Push) {
 		if f == formatJSON {
 			printJSON(p)
 			return
 		}
-		var upd ws.AccountOrderUpdate
-		if err := json.Unmarshal(p.Data, &upd); err != nil {
-			return
+		printUpdate := func(order *wstypes.SpotOrder, eventTime uint64, execType *string) {
+			ts := time.UnixMilli(int64(eventTime)).Format("15:04:05.000")
+			fmt.Printf("%s  %-20s  oid=%-12d  %s/%s  status=%-18s  price=%-14s  qty=%-12s  filled=%-12s  exec=%s\n",
+				ts, order.Symbol, order.OrderID, order.Side, order.Type,
+				order.Status, order.Price, order.Quantity, order.ExecutedQty, orderField(execType))
 		}
-		ts := time.UnixMilli(upd.EventTime).Format("15:04:05.000")
-		fmt.Printf("%s  %-20s  oid=%-12d  %s/%s  status=%-18s  price=%-14s  qty=%-12s  filled=%-12s  exec=%s\n",
-			ts, upd.Symbol, upd.OrderID, upd.Side, upd.OrderType,
-			upd.Status, upd.Price, upd.OrigQty, upd.FilledQty, upd.ExecType)
+		if engine == "spot" {
+			var updates []*wstypes.WsSpotOrderUpdate
+			if err := json.Unmarshal(p.Data, &updates); err != nil {
+				return
+			}
+			for _, update := range updates {
+				printUpdate(update.SpotOrder, update.EventTime, update.ExecType)
+			}
+		} else {
+			var updates []*wstypes.WsPerpsOrderUpdate
+			if err := json.Unmarshal(p.Data, &updates); err != nil {
+				return
+			}
+			for _, update := range updates {
+				printUpdate(update.SpotOrder, update.EventTime, update.ExecType)
+			}
+		}
 	}
 }
 
-func fillsPrinter(f outputFormat) func(ws.Push) {
+func fillsPrinter(f outputFormat, engine string) func(ws.Push) {
 	return func(p ws.Push) {
 		if f == formatJSON {
 			printJSON(p)
 			return
 		}
-		var fill ws.AccountTrade
-		if err := json.Unmarshal(p.Data, &fill); err != nil {
-			return
+		printFill := func(fill *wstypes.UserTrade) {
+			ts := time.UnixMilli(int64(fill.TradeTime)).Format("15:04:05.000")
+			maker := "taker"
+			if fill.IsMaker {
+				maker = "maker"
+			}
+			fmt.Printf("%s  %-20s  %s  price=%-14s  qty=%-12s  fee=%-10s  %s\n",
+				ts, fill.Symbol, fill.Side, fill.Price, fill.Quantity, fill.Fee, maker)
 		}
-		ts := time.UnixMilli(fill.TradeTime).Format("15:04:05.000")
-		maker := "taker"
-		if fill.IsMaker {
-			maker = "maker"
+		if engine == "spot" {
+			var events []*wstypes.WsUserSpotTrade
+			if err := json.Unmarshal(p.Data, &events); err != nil {
+				return
+			}
+			for _, event := range events {
+				printFill(event.UserTrade)
+			}
+		} else {
+			var events []*wstypes.WsUserPerpsTrade
+			if err := json.Unmarshal(p.Data, &events); err != nil {
+				return
+			}
+			for _, event := range events {
+				printFill(event.UserTrade)
+			}
 		}
-		fmt.Printf("%s  %-20s  %s  price=%-14s  qty=%-12s  fee=%-10s  %s\n",
-			ts, fill.Symbol, fill.Side, fill.Price, fill.Quantity, fill.Fee, maker)
 	}
 }
 

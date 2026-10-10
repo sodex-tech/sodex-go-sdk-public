@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// TestPerpsPositionsParsesPositionsWrapper verifies position data and block metadata survive the wrapper.
 func TestPerpsPositionsParsesPositionsWrapper(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -52,11 +53,11 @@ func TestPerpsPositionsParsesPositionsWrapper(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PerpsPositions: %v", err)
 	}
-	if len(positions) != 1 {
-		t.Fatalf("len(positions) = %d, want 1", len(positions))
+	if len(positions.Positions) != 1 || positions.BlockHeight != 161169726 {
+		t.Fatalf("unexpected position snapshot: %+v", positions)
 	}
 
-	p := positions[0]
+	p := positions.Positions[0]
 	if p.ID != 6279292 || p.Symbol != "BTC-USD" || p.PositionSide != "BOTH" {
 		t.Fatalf("unexpected position identity: %+v", p)
 	}
