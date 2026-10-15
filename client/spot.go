@@ -123,6 +123,30 @@ func (c *Client) SpotOrders(ctx context.Context, address string) (*rpctypes.Spot
 	return &result, nil
 }
 
+// SpotTwapOrdersHistory returns historical TWAP orders for address.
+// Filter supports AccountID and Limit. Default limit: 50, max: 500.
+func (c *Client) SpotTwapOrdersHistory(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]*rpctypes.TwapOrder, error) {
+	var result []*rpctypes.TwapOrder
+	if err := c.getTwapHistory(ctx, spotBase, "history", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// SpotTwapFillHistory returns TWAP trade history for address.
+// Filter supports AccountID and Limit. Default limit: 50, max: 500.
+func (c *Client) SpotTwapFillHistory(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]*rpctypes.AccountTrade, error) {
+	var result []*rpctypes.AccountTrade
+	if err := c.getTwapHistory(ctx, spotBase, "trades", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // ── Authenticated trading methods ─────────────────────────────────────────────
 
 // PlaceSpotOrders submits a batch of spot orders. A private key must be configured.

@@ -42,6 +42,44 @@ func main() {
 }
 ```
 
+### TWAP history and open-position funding (no key required)
+
+TWAP history methods take the account owner's wallet address, like other account
+reads. Only `AccountID` (optional sub-account selection) and `Limit` apply.
+
+```go
+ctx := context.Background()
+c := client.New(client.Config{BaseURL: client.TestnetBaseURL})
+address := "0xYourAddress"
+filter := client.HistoryFilter{Limit: 50}
+
+orders, err := c.PerpsTwapOrdersHistory(ctx, address, filter)
+if err != nil {
+    log.Fatal(err)
+}
+fills, err := c.PerpsTwapFillHistory(ctx, address, filter)
+if err != nil {
+    log.Fatal(err)
+}
+positions, err := c.PerpsPositions(ctx, address)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(orders, fills, positions.Positions)
+```
+
+Spot equivalents are `SpotTwapOrdersHistory` and `SpotTwapFillHistory`.
+TWAP queries use a default limit of 50 and a maximum of 500. Parent history
+contains inactive TWAP orders; fill history contains TWAP trades, including
+those of active TWAPs. Order and trade sides are `"BUY"` or `"SELL"`.
+
+`PerpsPositions` includes `PerpsPosition.CumFundingFee` (`cumFundingFee`) on open
+positions. Positive means received and negative means paid; the default is
+`"0"`. Amounts remain decimal strings; IDs remain `uint64`.
+
+Use the dedicated TWAP methods for parent history and child fills.
+See [account queries](./references/account-query.md) for the endpoint mapping.
+
 ### Authenticated trading
 
 ```go

@@ -227,6 +227,27 @@ func (c *Client) getHistory(ctx context.Context, path string, filter HistoryFilt
 	return c.do(req, result)
 }
 
+// getTwapHistory uses the existing account-address path and accountID/limit options.
+func (c *Client) getTwapHistory(ctx context.Context, base, resource, address string, filter HistoryFilter, result any) error {
+	u, err := url.Parse(c.cfg.BaseURL + base + "/accounts/" + address + "/twaps/" + resource)
+	if err != nil {
+		return fmt.Errorf("client: parse TWAP history URL: %w", err)
+	}
+	q := u.Query()
+	if filter.AccountID > 0 {
+		q.Set("accountID", strconv.FormatUint(filter.AccountID, 10))
+	}
+	if filter.Limit > 0 {
+		q.Set("limit", strconv.Itoa(filter.Limit))
+	}
+	u.RawQuery = q.Encode()
+	req, err := newGetReq(ctx, u.String())
+	if err != nil {
+		return err
+	}
+	return c.do(req, result)
+}
+
 // klines issues GET /<base>/markets/<symbol>/klines.
 func (c *Client) klines(
 	ctx context.Context, base, symbol, interval string, filter HistoryFilter,
