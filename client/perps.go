@@ -127,6 +127,30 @@ func (c *Client) PerpsFundingHistory(
 	return result, nil
 }
 
+// PerpsTwapOrdersHistory returns historical TWAP orders for address.
+// Filter supports AccountID and Limit. Default limit: 50, max: 500.
+func (c *Client) PerpsTwapOrdersHistory(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]*rpctypes.TwapOrder, error) {
+	var result []*rpctypes.TwapOrder
+	if err := c.getTwapHistory(ctx, perpsBase, "history", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// PerpsTwapFillHistory returns TWAP trade history for address.
+// Filter supports AccountID and Limit. Default limit: 50, max: 500.
+func (c *Client) PerpsTwapFillHistory(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]*rpctypes.AccountTrade, error) {
+	var result []*rpctypes.AccountTrade
+	if err := c.getTwapHistory(ctx, perpsBase, "trades", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // PerpsPositions returns all open positions for address.
 func (c *Client) PerpsPositions(ctx context.Context, address string) (*rpctypes.PerpsAccountPositions, error) {
 	var result rpctypes.PerpsAccountPositions
