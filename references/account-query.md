@@ -54,6 +54,37 @@ Prefix with `/api/v1/spot` or `/api/v1/perps`. Optional query param `accountID` 
 
 In the Go SDK, `client/types.SpotOrder.Price`, `Quantity` (JSON `origQty`), and `Funds` are `*string` because the API omits amounts that do not apply to an order. Check for `nil` before using them. `PerpsOrder` embeds `SpotOrder` and adds the perps-only fields.
 
+## TWAP history and cumulative position funding
+
+These reads need no signing key and take the account owner's wallet address.
+TWAP queries support only optional sub-account `AccountID` and `Limit`.
+
+| Go method | Endpoint |
+| --------- | -------- |
+| `SpotTwapOrdersHistory` | `GET /api/v1/spot/accounts/{address}/twaps/history` |
+| `SpotTwapFillHistory` | `GET /api/v1/spot/accounts/{address}/twaps/trades` |
+| `PerpsTwapOrdersHistory` | `GET /api/v1/perps/accounts/{address}/twaps/history` |
+| `PerpsTwapFillHistory` | `GET /api/v1/perps/accounts/{address}/twaps/trades` |
+| `PerpsPositions` | `GET /api/v1/perps/accounts/{address}/positions` |
+
+TWAP methods send `AccountID` and `Limit` as `accountID` and `limit`. Omitting
+`AccountID` selects the primary account. The default limit is 50, maximum 500.
+Parent history contains inactive TWAP orders; fill history contains TWAP trades,
+including those of active TWAPs. Order and trade sides are `"BUY"` or `"SELL"`.
+
+The existing `PerpsPositions` response includes `PerpsPosition.CumFundingFee`
+(`cumFundingFee`) on open positions. Positive means received and negative means
+paid. Preserve the decimal string.
+
+Use the dedicated TWAP methods for parent history and child fills.
+
+## DCA plans and fills
+
+Use `SpotDcaOrders` / `PerpsDcaOrders` for active plans,
+`SpotDcaOrdersHistory` / `PerpsDcaOrdersHistory` for past plans, and
+`SpotDcaFillHistory` / `PerpsDcaFillHistory` for fills.
+See [DCA usage](../README.md#dca-plans-spot-and-perps) for examples and filters.
+
 ## Rate Limits
 
 | Endpoint | Weight |
@@ -61,6 +92,7 @@ In the Go SDK, `client/types.SpotOrder.Price`, `Quantity` (JSON `origQty`), and 
 | balances, orders, positions, state, api-keys | 5 |
 | fee-rate | 2 |
 | order history, trades, funding history | 20 + floor(items/20) |
+| TWAP parent history, TWAP fill history | 20 + floor(items/20) |
 
 ## Examples
 
