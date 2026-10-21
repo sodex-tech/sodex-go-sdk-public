@@ -88,6 +88,16 @@ func (s *Signer) SignReplaceOrderRequest(request *ctypes.ReplaceOrderRequest, no
 	return s.signer.SignAction(request, nonce, s.privateKey)
 }
 
+// SignNewDcaOrderRequest signs a DCA plan creation request.
+func (s *Signer) SignNewDcaOrderRequest(request *ctypes.NewDcaOrderRequest, nonce uint64) ([]byte, error) {
+	return s.signer.SignAction(request, nonce, s.privateKey)
+}
+
+// SignCancelDcaOrderRequest signs a DCA plan cancellation request.
+func (s *Signer) SignCancelDcaOrderRequest(request *ctypes.CancelDcaOrderRequest, nonce uint64) ([]byte, error) {
+	return s.signer.SignAction(request, nonce, s.privateKey)
+}
+
 // SignScheduleCancelRequest signs a scheduled mass-cancel request.
 // The nonce must be the caller's next valid nonce for the spot engine.
 func (s *Signer) SignScheduleCancelRequest(request *ctypes.ScheduleCancelRequest, nonce uint64) ([]byte, error) {

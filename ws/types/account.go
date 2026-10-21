@@ -13,6 +13,7 @@ type WsSpotAccountState struct {
 	Balances []*SpotBalance `json:"B"`
 	Orders   []*SpotOrder   `json:"O"`
 	Twaps    []*TwapOrder   `json:"TO"`
+	Dcas     []*DcaOrder    `json:"DO"`
 }
 
 type WsSpotAccountUpdate struct {
@@ -22,6 +23,7 @@ type WsSpotAccountUpdate struct {
 
 	Balances []*SpotBalance `json:"B"`
 	Twaps    []*TwapOrder   `json:"TO"`
+	Dcas     []*DcaOrder    `json:"DO"`
 }
 
 type WsPerpsAccountState struct {
@@ -47,6 +49,7 @@ type WsPerpsAccountState struct {
 	Positions     []*PerpsPosition        `json:"P"`
 	Orders        []*PerpsOrder           `json:"O"`
 	Twaps         []*TwapOrder            `json:"TO"`
+	Dcas          []*DcaOrder             `json:"DO"`
 	SymbolConfigs []*PerpsSymbolConfig    `json:"S"`
 }
 
@@ -58,4 +61,5 @@ type WsPerpsAccountUpdate struct {
 	Balances  []*PerpsBalanceLite  `json:"B"`
 	Positions []*PerpsPositionLite `json:"P"`
 	Twaps     []*TwapOrder         `json:"TO"`
+	Dcas      []*DcaOrder          `json:"DO"`
 }
