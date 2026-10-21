@@ -13,6 +13,7 @@ type PerpsPosition struct {
 	AvgEntryPrice string `json:"avgEntryPrice"`
 	CumOpenCost   string `json:"cumOpenCost"`
 	CumTradingFee string `json:"cumTradingFee"`
+	CumFundingFee string `json:"cumFundingFee"`
 	CumClosedSize string `json:"cumClosedSize"`
 	AvgClosePrice string `json:"avgClosePrice"`
 	MaxSize       string `json:"maxSize"`
