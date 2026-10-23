@@ -16,4 +16,5 @@ type HistoryFilter struct {
 	StartTime int64
 	EndTime   int64
 	Limit     int
+	AccountID uint64
 }
