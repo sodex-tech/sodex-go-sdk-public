@@ -227,6 +227,56 @@ func (c *Client) getHistory(ctx context.Context, path string, filter HistoryFilt
 	return c.do(req, result)
 }
 
+// getTwapHistory uses the existing account-address path and accountID/limit options.
+func (c *Client) getTwapHistory(ctx context.Context, base, resource, address string, filter HistoryFilter, result any) error {
+	u, err := url.Parse(c.cfg.BaseURL + base + "/accounts/" + address + "/twaps/" + resource)
+	if err != nil {
+		return fmt.Errorf("client: parse TWAP history URL: %w", err)
+	}
+	q := u.Query()
+	if filter.AccountID > 0 {
+		q.Set("accountID", strconv.FormatUint(filter.AccountID, 10))
+	}
+	if filter.Limit > 0 {
+		q.Set("limit", strconv.Itoa(filter.Limit))
+	}
+	u.RawQuery = q.Encode()
+	req, err := newGetReq(ctx, u.String())
+	if err != nil {
+		return err
+	}
+	return c.do(req, result)
+}
+
+// getDcaOrders applies the filters supported by active plans or DCA history.
+func (c *Client) getDcaOrders(ctx context.Context, base, resource, address string, filter HistoryFilter, result any) error {
+	path := base + "/accounts/" + address + "/dcas"
+	if resource != "" {
+		path += "/" + resource
+	}
+	u, err := url.Parse(c.cfg.BaseURL + path)
+	if err != nil {
+		return fmt.Errorf("client: parse DCA URL: %w", err)
+	}
+	q := u.Query()
+	if filter.AccountID > 0 {
+		q.Set("accountID", strconv.FormatUint(filter.AccountID, 10))
+	}
+	if resource == "" {
+		if filter.Symbol != "" {
+			q.Set("symbol", filter.Symbol)
+		}
+	} else if filter.Limit > 0 {
+		q.Set("limit", strconv.Itoa(filter.Limit))
+	}
+	u.RawQuery = q.Encode()
+	req, err := newGetReq(ctx, u.String())
+	if err != nil {
+		return err
+	}
+	return c.do(req, result)
+}
+
 // klines issues GET /<base>/markets/<symbol>/klines.
 func (c *Client) klines(
 	ctx context.Context, base, symbol, interval string, filter HistoryFilter,
@@ -353,7 +403,7 @@ func (c *Client) do(req *http.Request, result any) error {
 	}
 
 	// Prefer decoding envelope.Data when available; fall back to raw body.
-	if len(envelope.Data) > 0 && string(envelope.Data) != "null" {
+	if len(envelope.Data) > 0 {
 		return json.Unmarshal(envelope.Data, result)
 	}
 	return json.Unmarshal(body, result)

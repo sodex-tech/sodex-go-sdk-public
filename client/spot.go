@@ -123,7 +123,93 @@ func (c *Client) SpotOrders(ctx context.Context, address string) (*rpctypes.Spot
 	return &result, nil
 }
 
+// SpotTwapOrdersHistory returns historical TWAP orders for address.
+// Filter supports AccountID and Limit. Default limit: 50, max: 500.
+func (c *Client) SpotTwapOrdersHistory(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]*rpctypes.TwapOrder, error) {
+	var result []*rpctypes.TwapOrder
+	if err := c.getTwapHistory(ctx, spotBase, "history", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// SpotTwapFillHistory returns TWAP trade history for address.
+// Filter supports AccountID and Limit. Default limit: 50, max: 500.
+func (c *Client) SpotTwapFillHistory(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]*rpctypes.AccountTrade, error) {
+	var result []*rpctypes.AccountTrade
+	if err := c.getTwapHistory(ctx, spotBase, "trades", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// SpotDcaOrders returns active DCA plans for address.
+func (c *Client) SpotDcaOrders(ctx context.Context, address string, filter HistoryFilter) (*rpctypes.AccountDcaOrders, error) {
+	var result rpctypes.AccountDcaOrders
+	if err := c.getDcaOrders(ctx, spotBase, "", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// SpotDcaOrdersHistory returns terminal DCA plans for address.
+func (c *Client) SpotDcaOrdersHistory(ctx context.Context, address string, filter HistoryFilter) ([]*rpctypes.DcaOrder, error) {
+	var result []*rpctypes.DcaOrder
+	if err := c.getDcaOrders(ctx, spotBase, "history", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// SpotDcaFillHistory returns DCA fills. OrderID is the child order ID;
+// ClOrdID is dca:<plan ID>.
+func (c *Client) SpotDcaFillHistory(ctx context.Context, address string, filter HistoryFilter) ([]*rpctypes.AccountTrade, error) {
+	var result []*rpctypes.AccountTrade
+	if err := c.getDcaOrders(ctx, spotBase, "trades", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // ── Authenticated trading methods ─────────────────────────────────────────────
+
+// PlaceSpotDcaOrder creates a DCA plan.
+func (c *Client) PlaceSpotDcaOrder(ctx context.Context, req *ctypes.NewDcaOrderRequest) (*rpctypes.DcaOrderResult, error) {
+	if c.spotSgn == nil {
+		return nil, ErrNotAuthenticated
+	}
+	nonce := c.nonce()
+	sig, err := c.spotSgn.SignNewDcaOrderRequest(req, nonce)
+	if err != nil {
+		return nil, fmt.Errorf("spot: sign new DCA order: %w", err)
+	}
+	var result rpctypes.DcaOrderResult
+	if err := c.postSigned(ctx, spotBase+"/trade/dcas", req, sig, nonce, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// CancelSpotDcaOrder cancels the parent DCA plan identified by req.OrderID.
+func (c *Client) CancelSpotDcaOrder(ctx context.Context, req *ctypes.CancelDcaOrderRequest) (*rpctypes.DcaOrderResult, error) {
+	if c.spotSgn == nil {
+		return nil, ErrNotAuthenticated
+	}
+	nonce := c.nonce()
+	sig, err := c.spotSgn.SignCancelDcaOrderRequest(req, nonce)
+	if err != nil {
+		return nil, fmt.Errorf("spot: sign cancel DCA order: %w", err)
+	}
+	var result rpctypes.DcaOrderResult
+	if err := c.deleteSigned(ctx, spotBase+"/trade/dcas", req, sig, nonce, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
 
 // PlaceSpotOrders submits a batch of spot orders. A private key must be configured.
 func (c *Client) PlaceSpotOrders(ctx context.Context, req *stypes.BatchNewOrderRequest) ([]*rpctypes.BatchNewOrderResult, error) {

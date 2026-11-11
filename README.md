@@ -42,6 +42,43 @@ func main() {
 }
 ```
 
+### TWAP history and open-position funding (no key required)
+
+TWAP history methods take the account owner's wallet address, like other account
+reads. Only `AccountID` (optional sub-account selection) and `Limit` apply.
+
+```go
+ctx := context.Background()
+c := client.New(client.Config{BaseURL: client.TestnetBaseURL})
+address := "0xYourAddress"
+filter := client.HistoryFilter{Limit: 50}
+
+orders, err := c.PerpsTwapOrdersHistory(ctx, address, filter)
+if err != nil {
+    log.Fatal(err)
+}
+fills, err := c.PerpsTwapFillHistory(ctx, address, filter)
+if err != nil {
+    log.Fatal(err)
+}
+positions, err := c.PerpsPositions(ctx, address)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(orders, fills, positions.Positions)
+```
+
+Spot equivalents are `SpotTwapOrdersHistory` and `SpotTwapFillHistory`.
+TWAP queries use a default limit of 50 and a maximum of 500. Parent history
+contains inactive TWAP orders; fill history contains TWAP trades, including
+those of active TWAPs. Order and trade sides are `"BUY"` or `"SELL"`.
+
+`PerpsPositions` includes `PerpsPosition.CumFundingFee` (`cumFundingFee`) on open
+positions. Positive means received and negative means paid.
+Amounts remain decimal strings; IDs remain `uint64`.
+
+See [account queries](./references/account-query.md) for the endpoint mapping.
+
 ### Authenticated trading
 
 ```go
@@ -87,6 +124,63 @@ func main() {
     log.Printf("placed: %+v", res)
 }
 ```
+
+### DCA plans (Spot and Perps)
+
+DCA supports interval, daily, weekly, biweekly and monthly schedules in UTC.
+`Amount` is USDC notional **per execution**, on either side, with a minimum of
+10 USDC. Spot requires a USDC-quoted symbol. Using the authenticated client above:
+
+```go
+// Additional import: ctypes "github.com/sodex-tech/sodex-go-sdk-public/common/types"
+ctx := context.Background()
+request := &ctypes.NewDcaOrderRequest{
+    AccountID: accountID,
+    SymbolID: symbolID,
+    Side: enums.OrderSideBuy,
+    Amount: decimal.RequireFromString("100"),
+    Schedule: ctypes.DcaSchedule{Kind: "daily", Hour: 0},
+    Immediate: true,
+}
+result, err := c.PlacePerpsDcaOrder(ctx, request)
+if err != nil {
+    log.Fatal(err)
+}
+if result.Code == 0 && result.OrderID != nil {
+    _, err = c.CancelPerpsDcaOrder(ctx, &ctypes.CancelDcaOrderRequest{
+        AccountID: accountID, SymbolID: symbolID, OrderID: *result.OrderID,
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+| Perps method | Spot equivalent | Result / filters |
+| --- | --- | --- |
+| `PlacePerpsDcaOrder` | `PlaceSpotDcaOrder` | `*types.DcaOrderResult` |
+| `CancelPerpsDcaOrder` | `CancelSpotDcaOrder` | `*types.DcaOrderResult` |
+| `PerpsDcaOrders` | `SpotDcaOrders` | `*types.AccountDcaOrders`; `HistoryFilter.Symbol` / `AccountID` |
+| `PerpsDcaOrdersHistory` | `SpotDcaOrdersHistory` | `[]*types.DcaOrder`; `AccountID` / `Limit` |
+| `PerpsDcaFillHistory` | `SpotDcaFillHistory` | `[]*types.AccountTrade`; `AccountID` / `Limit` |
+
+Omitting `AccountID` selects the primary account. History/fills default to 50
+records, with a maximum of 500. Fill `OrderID` identifies the child order;
+`ClOrdID="dca:<plan ID>"` links it to the plan.
+
+For `interval`, `Hour` is 1, 4, 8 or 12 and `Randomize` must be false. Calendar
+schedules use hours 0–23. Weekly/biweekly require `Day` 1–7 (Monday=1); monthly
+requires 1–31. Daily/interval leave `Day` nil. `Randomize` and `Immediate` both
+default to `false`. Optional `MinPrice` / `MaxPrice` set inclusive trigger
+bounds; fill prices can be outside them.
+
+`ws/types` account snapshots and updates include DCA plans in `Dcas` (`DO`).
+
+### Builder fee statistics
+
+Use `BuilderFeeSummary(ctx, owner, filter)` for combined Spot/Perps statistics and `BuilderFeeDailyChart(ctx, owner, filter)` for daily records. These reads require no signing key. The summary returns `*types.BuilderFeeStats` (`nil` when unavailable); the chart returns `[]*types.BuilderFeeDailyStats`. IDs and counts are `uint64`; monetary amounts remain strings.
+
+`HistoryFilter.AccountID` selects a builder account belonging to the owner; omit it for the primary account. Daily queries also accept `Limit` (default 90, maximum 300) and return the latest records in ascending UTC date order.
 
 ### WebSocket subscription
 
@@ -291,6 +385,8 @@ sig, err := s.SignNewOrderRequest(req, nonce)
 | `SignTransferAssetRequest`  | `TransferAssetRequest`  |
 | `SignReplaceOrderRequest`   | `ReplaceOrderRequest`   |
 | `SignScheduleCancelRequest` | `ScheduleCancelRequest` |
+| `SignNewDcaOrderRequest` | `NewDcaOrderRequest` |
+| `SignCancelDcaOrderRequest` | `CancelDcaOrderRequest` |
 
 To revoke a key from both engines, sign and submit the request separately with the Spot and Perps signers.
 

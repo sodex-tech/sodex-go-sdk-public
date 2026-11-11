@@ -127,6 +127,30 @@ func (c *Client) PerpsFundingHistory(
 	return result, nil
 }
 
+// PerpsTwapOrdersHistory returns historical TWAP orders for address.
+// Filter supports AccountID and Limit. Default limit: 50, max: 500.
+func (c *Client) PerpsTwapOrdersHistory(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]*rpctypes.TwapOrder, error) {
+	var result []*rpctypes.TwapOrder
+	if err := c.getTwapHistory(ctx, perpsBase, "history", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// PerpsTwapFillHistory returns TWAP trade history for address.
+// Filter supports AccountID and Limit. Default limit: 50, max: 500.
+func (c *Client) PerpsTwapFillHistory(
+	ctx context.Context, address string, filter HistoryFilter,
+) ([]*rpctypes.AccountTrade, error) {
+	var result []*rpctypes.AccountTrade
+	if err := c.getTwapHistory(ctx, perpsBase, "trades", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // PerpsPositions returns all open positions for address.
 func (c *Client) PerpsPositions(ctx context.Context, address string) (*rpctypes.PerpsAccountPositions, error) {
 	var result rpctypes.PerpsAccountPositions
@@ -136,7 +160,69 @@ func (c *Client) PerpsPositions(ctx context.Context, address string) (*rpctypes.
 	return &result, nil
 }
 
+// PerpsDcaOrders returns active DCA plans for address.
+func (c *Client) PerpsDcaOrders(ctx context.Context, address string, filter HistoryFilter) (*rpctypes.AccountDcaOrders, error) {
+	var result rpctypes.AccountDcaOrders
+	if err := c.getDcaOrders(ctx, perpsBase, "", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// PerpsDcaOrdersHistory returns terminal DCA plans for address.
+func (c *Client) PerpsDcaOrdersHistory(ctx context.Context, address string, filter HistoryFilter) ([]*rpctypes.DcaOrder, error) {
+	var result []*rpctypes.DcaOrder
+	if err := c.getDcaOrders(ctx, perpsBase, "history", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// PerpsDcaFillHistory returns DCA fills. OrderID is the child order ID;
+// ClOrdID is dca:<plan ID>.
+func (c *Client) PerpsDcaFillHistory(ctx context.Context, address string, filter HistoryFilter) ([]*rpctypes.AccountTrade, error) {
+	var result []*rpctypes.AccountTrade
+	if err := c.getDcaOrders(ctx, perpsBase, "trades", address, filter, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // ── Authenticated trading methods ─────────────────────────────────────────────
+
+// PlacePerpsDcaOrder creates a DCA plan.
+func (c *Client) PlacePerpsDcaOrder(ctx context.Context, req *ctypes.NewDcaOrderRequest) (*rpctypes.DcaOrderResult, error) {
+	if c.perpsSgn == nil {
+		return nil, ErrNotAuthenticated
+	}
+	nonce := c.nonce()
+	sig, err := c.perpsSgn.SignNewDcaOrderRequest(req, nonce)
+	if err != nil {
+		return nil, fmt.Errorf("perps: sign new DCA order: %w", err)
+	}
+	var result rpctypes.DcaOrderResult
+	if err := c.postSigned(ctx, perpsBase+"/trade/dcas", req, sig, nonce, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// CancelPerpsDcaOrder cancels the parent DCA plan identified by req.OrderID.
+func (c *Client) CancelPerpsDcaOrder(ctx context.Context, req *ctypes.CancelDcaOrderRequest) (*rpctypes.DcaOrderResult, error) {
+	if c.perpsSgn == nil {
+		return nil, ErrNotAuthenticated
+	}
+	nonce := c.nonce()
+	sig, err := c.perpsSgn.SignCancelDcaOrderRequest(req, nonce)
+	if err != nil {
+		return nil, fmt.Errorf("perps: sign cancel DCA order: %w", err)
+	}
+	var result rpctypes.DcaOrderResult
+	if err := c.deleteSigned(ctx, perpsBase+"/trade/dcas", req, sig, nonce, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
 
 // PlacePerpsOrder submits a perpetuals order batch. A private key must be configured.
 func (c *Client) PlacePerpsOrder(ctx context.Context, req *ptypes.NewOrderRequest) ([]*rpctypes.NewOrderResult, error) {
