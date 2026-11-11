@@ -327,6 +327,34 @@ func (c *Client) UpdateMargin(ctx context.Context, req *ptypes.UpdateMarginReque
 	return c.postSigned(ctx, perpsBase+"/trade/margin", req, sig, nonce, nil)
 }
 
+// UpdateCollateral adjusts cross-margin collateral. A positive amount adds collateral; a negative amount removes it.
+// The endpoint returns no data on success.
+func (c *Client) UpdateCollateral(ctx context.Context, req *ptypes.UpdateCollateralRequest) error {
+	if c.perpsSgn == nil {
+		return ErrNotAuthenticated
+	}
+	nonce := c.nonce()
+	sig, err := c.perpsSgn.SignUpdateCollateralRequest(req, nonce)
+	if err != nil {
+		return fmt.Errorf("perps: sign update collateral: %w", err)
+	}
+	return c.postSigned(ctx, perpsBase+"/trade/collateral", req, sig, nonce, nil)
+}
+
+// UpdateCredit adjusts a credit account. A positive amount mints credit; a negative amount burns it.
+// The endpoint returns no data on success.
+func (c *Client) UpdateCredit(ctx context.Context, req *ptypes.UpdateCreditRequest) error {
+	if c.perpsSgn == nil {
+		return ErrNotAuthenticated
+	}
+	nonce := c.nonce()
+	sig, err := c.perpsSgn.SignUpdateCreditRequest(req, nonce)
+	if err != nil {
+		return fmt.Errorf("perps: sign update credit: %w", err)
+	}
+	return c.postSigned(ctx, perpsBase+"/trade/credit", req, sig, nonce, nil)
+}
+
 // PerpsTransfer transfers assets between perps accounts and returns the transfer ID.
 func (c *Client) PerpsTransfer(ctx context.Context, req *ctypes.TransferAssetRequest) (*rpctypes.TransferAssetResponse, error) {
 	if c.perpsSgn == nil {

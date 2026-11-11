@@ -147,3 +147,15 @@ func (s *Signer) SignUpdateLeverageRequest(request *types.UpdateLeverageRequest,
 func (s *Signer) SignUpdateMarginRequest(request *types.UpdateMarginRequest, nonce uint64) ([]byte, error) {
 	return s.signer.SignAction(request, nonce, s.privateKey)
 }
+
+// SignUpdateCollateralRequest signs a perpetuals collateral adjustment request.
+// The nonce must be the caller's next valid nonce for the perps engine.
+func (s *Signer) SignUpdateCollateralRequest(request *types.UpdateCollateralRequest, nonce uint64) ([]byte, error) {
+	return s.signer.SignAction(request, nonce, s.privateKey)
+}
+
+// SignUpdateCreditRequest signs a perpetuals credit adjustment request.
+// The nonce must be the caller's next valid nonce for the perps engine.
+func (s *Signer) SignUpdateCreditRequest(request *types.UpdateCreditRequest, nonce uint64) ([]byte, error) {
+	return s.signer.SignAction(request, nonce, s.privateKey)
+}
