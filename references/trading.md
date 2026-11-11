@@ -82,6 +82,8 @@ Prefix with `/api/v1/spot` or `/api/v1/perps`. Requires signed headers (see `ref
 | `/accounts/transfers` | POST | `transferAsset` | Transfer between accounts |
 | `/trade/leverage` | POST | `updateLeverage` | Update leverage (perps) |
 | `/trade/margin` | POST | `updateMargin` | Update isolated margin (perps) |
+| `/trade/collateral` | POST | `updateCollateral` | Add/remove cross-margin collateral (perps) |
+| `/trade/credit` | POST | `updateCredit` | Mint/burn credit (credit accounts only) |
 
 ## Request Bodies
 

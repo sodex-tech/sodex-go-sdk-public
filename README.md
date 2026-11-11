@@ -125,6 +125,19 @@ func main() {
 }
 ```
 
+### Perps collateral and credit
+
+`UpdateCollateral(ctx, *ptypes.UpdateCollateralRequest)` adjusts cross-margin
+collateral using `AccountID`, `CoinID`, and a `decimal.Decimal` `Amount`.
+Positive amounts add collateral; negative amounts remove it.
+
+`UpdateCredit(ctx, *ptypes.UpdateCreditRequest)` uses `AccountID` and a
+`decimal.Decimal` `Amount`. It is available only for credit accounts: positive
+amounts mint credit and negative amounts burn it.
+
+Both methods return only an `error` and require a non-zero amount with valid
+asset precision. Here `ptypes` is `github.com/sodex-tech/sodex-go-sdk-public/perps/types`.
+
 ### DCA plans (Spot and Perps)
 
 DCA supports interval, daily, weekly, biweekly and monthly schedules in UTC.
@@ -406,6 +419,8 @@ To revoke a key from both engines, sign and submit the request separately with t
 | `SignModifyOrderRequest`    | `ModifyOrderRequest`    |
 | `SignUpdateLeverageRequest` | `UpdateLeverageRequest` |
 | `SignUpdateMarginRequest`   | `UpdateMarginRequest`   |
+| `SignUpdateCollateralRequest` | `UpdateCollateralRequest` |
+| `SignUpdateCreditRequest` | `UpdateCreditRequest` |
 
 ### Nonce
 
